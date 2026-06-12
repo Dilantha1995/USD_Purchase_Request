@@ -12,8 +12,6 @@ async function main() {
 
   await prisma.company.upsert({
     where: { id: "PSMS" },
-    // NOTE: nextSerial is only set on first creation. Set the starting number to
-    // continue from your existing manual sequence (e.g. 8 if 07 was the last one).
     create: {
       id: "PSMS",
       name: "ProSynergy Medical Systems Pvt Ltd",
@@ -48,25 +46,18 @@ async function main() {
     },
   });
 
-  // --- Initial admin user ---
+  // --- Admin user ---
   const email = (process.env.SEED_ADMIN_EMAIL || "admin@propharmamaldives.com").toLowerCase();
   const name = process.env.SEED_ADMIN_NAME || "Administrator";
   const password = process.env.SEED_ADMIN_PASSWORD || "change-this-password";
+  const passwordHash = await bcrypt.hash(password, 10);
 
-  const existing = await prisma.user.findUnique({ where: { email } });
-  if (!existing) {
-    await prisma.user.create({
-      data: {
-        email,
-        name,
-        passwordHash: await bcrypt.hash(password, 10),
-        role: "ADMIN",
-      },
-    });
-    console.log(`Created admin user: ${email}`);
-  } else {
-    console.log(`Admin user already exists: ${email}`);
-  }
+  await prisma.user.upsert({
+    where: { email },
+    create: { email, name, passwordHash, role: "ADMIN", active: true },
+    update: { name, passwordHash, role: "ADMIN", active: true },
+  });
+  console.log(`Admin user ready: ${email}`);
 
   console.log("Seed complete.");
 }
