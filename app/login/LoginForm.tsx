@@ -1,11 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 
-export default function LoginForm() {
+export default function LoginPage() {
   const router = useRouter();
-  const params = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -22,7 +21,7 @@ export default function LoginForm() {
     });
     setLoading(false);
     if (res.ok) {
-      router.push(params.get("next") || "/dashboard");
+      router.push("/dashboard");
       router.refresh();
     } else {
       const data = await res.json().catch(() => ({}));
@@ -40,29 +39,17 @@ export default function LoginForm() {
         <form onSubmit={submit} className="card space-y-4 p-6">
           <div>
             <label className="label">Email</label>
-            <input
-              className="input"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              autoComplete="username"
-              required
-            />
+            <input className="input" type="email" value={email}
+              onChange={(e) => setEmail(e.target.value)} autoComplete="username" required />
           </div>
           <div>
             <label className="label">Password</label>
-            <input
-              className="input"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete="current-password"
-              required
-            />
+            <input className="input" type="password" value={password}
+              onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required />
           </div>
           {error && <p className="text-sm text-red-600">{error}</p>}
           <button className="btn-primary w-full" disabled={loading}>
-            {loading ? "Signing in\u2026" : "Sign in"}
+            {loading ? "Signing in…" : "Sign in"}
           </button>
         </form>
       </div>
