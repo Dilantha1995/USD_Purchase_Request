@@ -1,58 +1,72 @@
-"use client";
+import { PrismaClient } from "@prisma/client";
+import bcrypt from "bcryptjs";
+import { readFileSync } from "fs";
+import { join } from "path";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+const prisma = new PrismaClient();
 
-export default function LoginPage() {
-  const router = useRouter();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+async function main() {
+  // --- Companies (letterhead PDFs are stored in the DB so generation works on serverless) ---
+  const synergyPdf = readFileSync(join(__dirname, "templates", "prosynergy.pdf"));
+  const pharmaPdf = readFileSync(join(__dirname, "templates", "propharma.pdf"));
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    setError("");
-    setLoading(true);
-    const res = await fetch("/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
-    });
-    setLoading(false);
-    if (res.ok) {
-      router.push("/dashboard");
-      router.refresh();
-    } else {
-      const data = await res.json().catch(() => ({}));
-      setError(data.error || "Could not sign in. Check your email and password.");
-    }
-  }
+  await prisma.company.upsert({
+    where: { id: "PSMS" },
+    create: {
+      id: "PSMS",
+      name: "ProSynergy Medical Systems Pvt Ltd",
+      refPrefix: "PSMS",
+      brandColor: "#7aa83a",
+      templatePdf: synergyPdf,
+      nextSerial: 8,
+    },
+    update: {
+      name: "ProSynergy Medical Systems Pvt Ltd",
+      refPrefix: "PSMS",
+      brandColor: "#7aa83a",
+      templatePdf: synergyPdf,
+    },
+  });
 
-  return (
-    <main className="flex min-h-screen items-center justify-center px-4">
-      <div className="w-full max-w-sm">
-        <div className="mb-6 text-center">
-          <h1 className="text-lg font-semibold text-ink">Dollar Purchase Requests</h1>
-          <p className="text-sm text-slate-500">ProSynergy &amp; ProPharma Maldives</p>
-        </div>
-        <form onSubmit={submit} className="card space-y-4 p-6">
-          <div>
-            <label className="label">Email</label>
-            <input className="input" type="email" value={email}
-              onChange={(e) => setEmail(e.target.value)} autoComplete="username" required />
-          </div>
-          <div>
-            <label className="label">Password</label>
-            <input className="input" type="password" value={password}
-              onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required />
-          </div>
-          {error && <p className="text-sm text-red-600">{error}</p>}
-          <button className="btn-primary w-full" disabled={loading}>
-            {loading ? "Signing in…" : "Sign in"}
-          </button>
-        </form>
-      </div>
-    </main>
-  );
+  await prisma.company.upsert({
+    where: { id: "PPM" },
+    create: {
+      id: "PPM",
+      name: "ProPharma Maldives Pvt Ltd",
+      refPrefix: "PPM",
+      brandColor: "#15a7e0",
+      templatePdf: pharmaPdf,
+      nextSerial: 1,
+    },
+    update: {
+      name: "ProPharma Maldives Pvt Ltd",
+      refPrefix: "PPM",
+      brandColor: "#15a7e0",
+      templatePdf: pharmaPdf,
+    },
+  });
+
+  // --- Admin user ---
+  const email = (process.env.SEED_ADMIN_EMAIL || "admin@propharmamaldives.com").toLowerCase();
+  const name = process.env.SEED_ADMIN_NAME || "Administrator";
+  const password = process.env.SEED_ADMIN_PASSWORD || "change-this-password";
+  const passwordHash = await bcrypt.hash(password, 10);
+
+  await prisma.user.upsert({
+    where: { email },
+    create: { email, name, passwordHash, role: "ADMIN", active: true },
+    update: { name, passwordHash, role: "ADMIN", active: true },
+  });
+  console.log(`Admin user ready: ${email}`);
+
+  console.log("Seed complete.");
 }
+
+main()
+  .catch((e) => {
+    console.error(e);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });
