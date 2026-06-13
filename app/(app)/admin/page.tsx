@@ -15,7 +15,7 @@ export default async function AdminPage() {
       orderBy: { id: "asc" },
     }),
     prisma.user.findMany({
-      select: { id: true, email: true, name: true, role: true, active: true },
+      select: { id: true, email: true, name: true, role: true, active: true, canEditRequests: true, canDeleteRequests: true, canManageSuppliers: true, canManageBankAccounts: true },
       orderBy: { createdAt: "asc" },
     }),
   ]);

@@ -1,12 +1,17 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { getCurrentUser } from "@/lib/auth";
 import { formatAmount, formatDate, totalMvr, Transfer } from "@/lib/format";
 import StatusActions from "./StatusActions";
+import DeleteRequest from "./DeleteRequest";
 
 export const dynamic = "force-dynamic";
 
 export default async function RequestDetail({ params }: { params: { id: string } }) {
+  const me = await getCurrentUser();
+  const isAdmin = me?.role === "ADMIN";
+  const canDelete = isAdmin || Boolean(me?.canDeleteRequests);
   const r = await prisma.request.findUnique({
     where: { id: params.id },
     include: {
@@ -32,6 +37,7 @@ export default async function RequestDetail({ params }: { params: { id: string }
             Download PDF
           </a>
           <StatusActions id={r.id} initialStatus={r.status} />
+          {canDelete && <DeleteRequest id={r.id} refNo={r.refNo} />}
         </div>
       </div>
 

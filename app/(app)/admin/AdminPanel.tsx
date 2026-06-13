@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 type Company = { id: string; name: string; refPrefix: string; brandColor: string; nextSerial: number };
-type User = { id: string; email: string; name: string; role: "ADMIN" | "USER"; active: boolean };
+type User = { id: string; email: string; name: string; role: "ADMIN" | "USER"; active: boolean; canEditRequests: boolean; canDeleteRequests: boolean; canManageSuppliers: boolean; canManageBankAccounts: boolean };
 
 export default function AdminPanel({
   companies,
@@ -140,7 +140,33 @@ function UserRow({ user, isSelf, onChanged }: { user: User; isSelf: boolean; onC
     <tr className="hover:bg-slate-50">
       <td className="px-4 py-3 font-medium">{user.name}</td>
       <td className="px-4 py-3 text-slate-600">{user.email}</td>
-      <td className="px-4 py-3">{user.role === "ADMIN" ? "Admin" : "User"}</td>
+      <td className="px-4 py-3 align-top">
+        {user.role === "ADMIN" ? (
+          <span className="text-slate-700">Admin · full access</span>
+        ) : (
+          <div className="space-y-1">
+            <span className="text-slate-700">User</span>
+            <div className="flex flex-col gap-0.5 text-xs text-slate-600">
+              {([
+                ["canEditRequests", "Edit requests"],
+                ["canDeleteRequests", "Delete requests"],
+                ["canManageSuppliers", "Manage suppliers"],
+                ["canManageBankAccounts", "Manage bank accounts"],
+              ] as const).map(([key, label]) => (
+                <label key={key} className="flex items-center gap-1.5">
+                  <input
+                    type="checkbox"
+                    checked={(user as any)[key]}
+                    disabled={busy}
+                    onChange={(e) => patch({ [key]: e.target.checked })}
+                  />
+                  {label}
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+      </td>
       <td className="px-4 py-3">
         <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${user.active ? "bg-green-100 text-green-700" : "bg-slate-200 text-slate-600"}`}>
           {user.active ? "Active" : "Disabled"}
