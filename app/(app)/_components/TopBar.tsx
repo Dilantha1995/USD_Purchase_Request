@@ -3,13 +3,25 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 
-export default function TopBar({ name, role }: { name: string; role: "ADMIN" | "USER" }) {
+export default function TopBar({
+  name,
+  role,
+  canManageSuppliers,
+  canManageBankAccounts,
+}: {
+  name: string;
+  role: "ADMIN" | "USER";
+  canManageSuppliers?: boolean;
+  canManageBankAccounts?: boolean;
+}) {
   const pathname = usePathname();
   const router = useRouter();
 
   const links = [
     { href: "/dashboard", label: "Requests" },
     { href: "/new", label: "New request" },
+    ...(canManageSuppliers ? [{ href: "/suppliers", label: "Suppliers" }] : []),
+    ...(canManageBankAccounts ? [{ href: "/bank-accounts", label: "Bank accounts" }] : []),
     ...(role === "ADMIN" ? [{ href: "/admin", label: "Admin" }] : []),
   ];
 
