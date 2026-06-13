@@ -58,7 +58,16 @@ export async function POST(req: Request) {
     const created = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const company = await tx.company.findUnique({ where: { id: body.companyId } });
       if (!company) throw new Error("Unknown company");
-      const serial = company.nextSerial;
+
+      // Serial restarts at 1 each calendar month (based on the document's YYMM).
+      // Within the same month it continues from the company's counter, so the
+      // admin "starting serial" still controls the current month's first number.
+      const period = `${String(date.getUTCFullYear()).slice(-2)}${String(
+        date.getUTCMonth() + 1
+      ).padStart(2, "0")}`;
+      const sameMonth = company.serialPeriod === period || company.serialPeriod == null;
+      const serial = sameMonth ? company.nextSerial : 1;
+
       const refNo = buildRefNo(company.refPrefix, date, serial);
       const request = await tx.request.create({
         data: {
@@ -78,7 +87,7 @@ export async function POST(req: Request) {
       });
       await tx.company.update({
         where: { id: company.id },
-        data: { nextSerial: serial + 1 },
+        data: { nextSerial: serial + 1, serialPeriod: period },
       });
       return request;
     });

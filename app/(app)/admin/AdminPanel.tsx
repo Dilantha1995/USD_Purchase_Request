@@ -24,7 +24,8 @@ export default function AdminPanel({
       <section className="space-y-3">
         <h2 className="text-sm font-semibold text-slate-700">Reference numbering</h2>
         <p className="text-sm text-slate-500">
-          The serial counts up continuously and never resets. Set the next number to match where
+          The serial restarts at 1 at the beginning of each month. This sets the next number for the
+          current month — use it to match where
           your manual sequence left off.
         </p>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

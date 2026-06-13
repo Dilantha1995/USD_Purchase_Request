@@ -10,6 +10,7 @@ type Company = {
   refPrefix: string;
   brandColor: string;
   nextSerial: number;
+  serialPeriod?: string | null;
 };
 
 type TransferDraft = { recipient: string; account: string; amounts: string[] };
@@ -59,7 +60,10 @@ export default function NewRequestForm({
     if (!company) return "";
     const d = new Date(`${date}T00:00:00Z`);
     if (isNaN(d.getTime())) return "";
-    return buildRefNo(company.refPrefix, d, company.nextSerial);
+    const period = `${String(d.getUTCFullYear()).slice(-2)}${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+    const sameMonth = company.serialPeriod === period || company.serialPeriod == null;
+    const serial = sameMonth ? company.nextSerial : 1;
+    return buildRefNo(company.refPrefix, d, serial);
   }, [company, date]);
 
   const totalMvr = useMemo(

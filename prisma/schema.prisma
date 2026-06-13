@@ -42,6 +42,7 @@ model Company {
   brandColor   String
   templatePdf  Bytes
   nextSerial   Int           @default(1)
+  serialPeriod String?       // YYMM the nextSerial counter currently belongs to; counter resets when the month changes
   requests     Request[]
   bankAccounts BankAccount[]
 }
