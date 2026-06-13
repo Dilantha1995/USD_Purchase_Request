@@ -71,3 +71,26 @@ export async function getSession(): Promise<SessionUser | null> {
 }
 
 export const SESSION_COOKIE = COOKIE;
+
+// --- Full user record (with permissions) for server-side authorization ---
+import { prisma } from "./db";
+
+export type Permission =
+  | "canEditRequests"
+  | "canDeleteRequests"
+  | "canManageSuppliers"
+  | "canManageBankAccounts";
+
+export async function getCurrentUser() {
+  const s = await getSession();
+  if (!s) return null;
+  return prisma.user.findUnique({ where: { id: s.id } });
+}
+
+/** ADMIN always passes. Otherwise the specific permission flag must be true. */
+export async function can(permission: Permission): Promise<boolean> {
+  const u = await getCurrentUser();
+  if (!u || !u.active) return false;
+  if (u.role === "ADMIN") return true;
+  return Boolean((u as any)[permission]);
+}

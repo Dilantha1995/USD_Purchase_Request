@@ -43,85 +43,113 @@ request is saved, so concurrent saves can't produce duplicates. Set the starting
 
 ---
 
-## Deploy to Vercel (step by step)
+## Deploy — beginner friendly, no terminal needed
 
-### 1. Push to GitHub
-```bash
-git init
-git add .
-git commit -m "Initial commit"
-git branch -M main
-git remote add origin https://github.com/<you>/dollar-purchase-tool.git
-git push -u origin main
-```
+You do **not** need to install anything on your computer or use a command line. The tables
+and starting data are created automatically the first time the site builds on Vercel.
 
-### 2. Import into Vercel
-- vercel.com → **Add New… → Project** → import the GitHub repo.
-- Framework preset: **Next.js** (auto-detected). Don't deploy yet — add the database first.
+You need two free accounts: **GitHub** (github.com) and **Vercel** (vercel.com). Sign up
+for both first (you can click "Continue with GitHub" on Vercel to link them).
 
-### 3. Create the database (Vercel Postgres / Neon)
-- In the project: **Storage → Create Database → Postgres (Neon)** → connect it to the project.
-- Vercel automatically injects `DATABASE_URL` and (for Neon) a direct URL. This app expects
-  two variables:
-  - `DATABASE_URL` — the **pooled** connection string
-  - `DIRECT_URL` — the **direct** (non-pooled) connection string, used for schema changes
-- In **Settings → Environment Variables**, make sure both exist. If Vercel only gave you one
-  Neon URL, set `DIRECT_URL` to the same value (Neon tolerates this for a small app).
+### Step 1 — Put the code on GitHub (using the GitHub Desktop app)
 
-### 4. Add the remaining environment variables
-In **Settings → Environment Variables** add:
+1. Download and install **GitHub Desktop** from desktop.github.com. Sign in with your
+   GitHub account.
+2. Unzip the project so you have a folder called `dollar-purchase-tool`.
+3. In GitHub Desktop: **File → Add local repository** → choose that folder. If it says
+   "this isn't a Git repository," click **create a repository** and then **Create**.
+4. Click **Publish repository** (top right). Untick "Keep this code private" only if you
+   want it public — private is fine. Click **Publish repository**.
 
-| Name | Value |
-|------|-------|
-| `AUTH_SECRET` | a long random string — generate with `openssl rand -base64 32` |
-| `SEED_ADMIN_EMAIL` | your admin login email |
-| `SEED_ADMIN_NAME` | admin display name |
-| `SEED_ADMIN_PASSWORD` | a strong initial admin password |
+Your code is now on GitHub. (If you prefer, you can instead go to github.com → New
+repository → "uploading an existing file" and drag the unzipped files in — but GitHub
+Desktop is easier.)
 
-### 5. Create the tables and seed the data
-Run this **once** from your computer, pointing at the production database. Copy the
-`DATABASE_URL` and `DIRECT_URL` values from Vercel into a local `.env` file (see
-`.env.example`), then:
+### Step 2 — Create the project on Vercel
 
-```bash
-npm install
-npx prisma db push      # creates the tables in Neon
-npm run db:seed         # creates both companies (with letterheads) + the admin user
-```
+1. Go to vercel.com → **Add New… → Project**.
+2. Find `dollar-purchase-tool` in the list and click **Import**.
+3. Leave everything as-is (it detects Next.js) and click **Deploy**.
+4. **This first build will fail with a database error. That is expected** — we connect the
+   database next. Just continue.
 
-> The seed loads the two letterhead PDFs from `prisma/templates/` into the database, so PDF
-> generation works on Vercel's serverless runtime without relying on the filesystem.
+### Step 3 — Connect the database (fully automatic, nothing to copy)
 
-### 6. Deploy
-Trigger a deploy in Vercel (or `git push`). Open the site, sign in with the admin
-credentials, and you're live.
+1. In your new Vercel project, open the **Storage** tab.
+2. Click **Create Database** (or **Connect Database**), choose **Neon** (Serverless
+   Postgres), and follow the prompts to create it. Accept the defaults.
+3. When asked, **connect it to this project** and to **all environments**
+   (Production, Preview, Development).
+
+That's it for the database — Vercel automatically adds the connection settings
+(`DATABASE_URL` and `DATABASE_URL_UNPOOLED`) to your project. You don't copy or paste
+anything.
+
+> Make sure you pick **Neon**, not "Prisma Postgres" — Neon provides the direct connection
+> the app uses to create its tables.
+
+### Step 4 — Add four settings
+
+In the project: **Settings → Environment Variables**. Add these four, one at a time. For
+each, type the **Key** (left) and **Value** (right), leave all three environment boxes
+ticked, and click **Save**.
+
+| Key | Value |
+|-----|-------|
+| `AUTH_SECRET` | a long random string (see the value provided to you in chat, or make up 40+ random characters) |
+| `SEED_ADMIN_EMAIL` | the email you'll log in with, e.g. `admin@propharmamaldives.com` |
+| `SEED_ADMIN_NAME` | your name, e.g. `Administrator` |
+| `SEED_ADMIN_PASSWORD` | a strong password you'll use to log in the first time |
+
+### Step 5 — Deploy again (this time it works)
+
+1. Open the **Deployments** tab.
+2. On the most recent (failed) deployment, click the **⋯** menu → **Redeploy** → confirm.
+3. Wait for it to finish (a couple of minutes). During this build the app automatically
+   creates the database tables, loads both company letterheads, and creates your admin
+   login.
+
+### Step 6 — Sign in
+
+Open your site's address (the `*.vercel.app` link at the top of the project) and log in
+with the **SEED_ADMIN_EMAIL** and **SEED_ADMIN_PASSWORD** you set in Step 4.
+
+You're live. Create users for your team under **Admin**, and confirm the starting serial
+numbers under **Admin → Reference numbering**.
+
+> **Troubleshooting:** if a build ever fails saying `DATABASE_URL_UNPOOLED` is missing, go
+> to **Settings → Environment Variables**, add a variable named `DATABASE_URL_UNPOOLED` and
+> paste the same value as `DATABASE_URL`, then redeploy.
 
 ---
 
-## Run locally
+## Making changes later (also no terminal)
+
+Any change you push to GitHub triggers Vercel to rebuild and redeploy automatically. With
+GitHub Desktop: edit/replace files in the folder, write a short summary, click **Commit to
+main**, then **Push origin**. Vercel does the rest.
+
+### Updating a letterhead
+Replace the file in `prisma/templates/` (`prosynergy.pdf` or `propharma.pdf`) — keep the
+same filename — then commit and push. The new letterhead is loaded on the next deploy;
+existing requests and serial numbers are untouched.
+
+### Adding a third company later
+Tell me and I'll add it, or: drop its letterhead into `prisma/templates/`, copy one of the
+`company.upsert({...})` blocks in `prisma/seed.ts` and change the `id`, `refPrefix`,
+`brandColor`, and filename, then commit and push.
+
+---
+
+## For developers: running locally (optional)
 
 ```bash
-cp .env.example .env     # fill in DATABASE_URL, DIRECT_URL, AUTH_SECRET, SEED_ADMIN_*
+cp .env.example .env     # fill DATABASE_URL, DATABASE_URL_UNPOOLED, AUTH_SECRET, SEED_ADMIN_*
 npm install
-npx prisma db push
-npm run db:seed
+npx prisma db push       # create tables
+npm run db:seed          # load companies + admin
 npm run dev              # http://localhost:3000
 ```
-
----
-
-## Updating a letterhead
-
-Replace the file in `prisma/templates/` (`prosynergy.pdf` or `propharma.pdf`), keep the
-same filename, then re-run `npm run db:seed`. The `upsert` refreshes the stored letterhead
-without touching serial numbers or existing requests.
-
-## Adding a third company later
-
-1. Add its letterhead to `prisma/templates/`.
-2. Add a `company.upsert({...})` block in `prisma/seed.ts` with a new `id`, `refPrefix`,
-   `brandColor`, and `templatePdf`.
-3. Re-run `npm run db:seed`. It will appear automatically in the company picker.
 
 ---
 

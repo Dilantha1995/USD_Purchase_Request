@@ -21,7 +21,13 @@ export default function LoginPage() {
     });
     setLoading(false);
     if (res.ok) {
-      router.push("/dashboard");
+      // Return to the originally requested page if there was one, else the dashboard.
+      let next = "/dashboard";
+      try {
+        const p = new URLSearchParams(window.location.search).get("next");
+        if (p && p.startsWith("/")) next = p;
+      } catch {}
+      router.push(next);
       router.refresh();
     } else {
       const data = await res.json().catch(() => ({}));
@@ -39,17 +45,29 @@ export default function LoginPage() {
         <form onSubmit={submit} className="card space-y-4 p-6">
           <div>
             <label className="label">Email</label>
-            <input className="input" type="email" value={email}
-              onChange={(e) => setEmail(e.target.value)} autoComplete="username" required />
+            <input
+              className="input"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              autoComplete="username"
+              required
+            />
           </div>
           <div>
             <label className="label">Password</label>
-            <input className="input" type="password" value={password}
-              onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required />
+            <input
+              className="input"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+              required
+            />
           </div>
           {error && <p className="text-sm text-red-600">{error}</p>}
           <button className="btn-primary w-full" disabled={loading}>
-            {loading ? "Signing in…" : "Sign in"}
+            {loading ? "Signing in\u2026" : "Sign in"}
           </button>
         </form>
       </div>

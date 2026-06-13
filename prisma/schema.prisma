@@ -19,24 +19,65 @@ enum RequestStatus {
 }
 
 model User {
-  id           String    @id @default(cuid())
-  email        String    @unique
+  id           String   @id @default(cuid())
+  email        String   @unique
   name         String
   passwordHash String
-  role         Role      @default(USER)
-  active       Boolean   @default(true)
+  role         Role     @default(USER)
+  active       Boolean  @default(true)
+
+  canEditRequests       Boolean @default(false)
+  canDeleteRequests     Boolean @default(false)
+  canManageSuppliers    Boolean @default(false)
+  canManageBankAccounts Boolean @default(false)
+
   createdAt    DateTime  @default(now())
   requests     Request[]
 }
 
 model Company {
-  id          String    @id // "PSMS" or "PPM"
-  name        String // full legal name shown on the document title
-  refPrefix   String // e.g. "PSMS" -> ref becomes PSMS/DEX/YYMM/NN
-  brandColor  String // hex used in the UI
-  templatePdf Bytes // the company letterhead PDF, overlaid at generation time
-  nextSerial  Int       @default(1) // continuous counter; never resets
-  requests    Request[]
+  id           String        @id
+  name         String
+  refPrefix    String
+  brandColor   String
+  templatePdf  Bytes
+  nextSerial   Int           @default(1)
+  requests     Request[]
+  bankAccounts BankAccount[]
+}
+
+model Supplier {
+  id          String    @id @default(cuid())
+  name        String
+  bankName    String?
+  accountName String?
+  accountNo   String?
+  notes       String?
+  active      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+}
+
+model BankAccount {
+  id          String   @id @default(cuid())
+  company     Company? @relation(fields: [companyId], references: [id])
+  companyId   String?
+  label       String
+  bankName    String?
+  accountName String?
+  accountNo   String?
+  currency    String   @default("MVR")
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+}
+
+model Signatory {
+  id        String   @id @default(cuid())
+  name      String
+  title     String?
+  kind      String   @default("BOTH")
+  signature Bytes?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
 }
 
 model Request {
@@ -45,18 +86,26 @@ model Request {
   serial        Int
   company       Company       @relation(fields: [companyId], references: [id])
   companyId     String
-  date          DateTime // document date, drives the YYMM in the ref no
+  date          DateTime
   usdAmount     Float
   rate          Float
-  source        String // where the USD is bought from, e.g. "Island amenities"
-  sourceAccount String // e.g. "PSMS BML MVR"
+  source        String
+  sourceAccount String
   requestedBy   String
   approvedBy    String
-  transfers     Json // [{ recipient, account, amounts: number[] }]
+  transfers     Json
+
   status        RequestStatus @default(PENDING)
-  createdBy     User          @relation(fields: [createdById], references: [id])
-  createdById   String
-  createdAt     DateTime      @default(now())
+
+  requestedSignatoryId String?
+  approvedSignatoryId  String?
+
+  receipts    Json?
+  completedAt DateTime?
+
+  createdBy   User     @relation(fields: [createdById], references: [id])
+  createdById String
+  createdAt   DateTime @default(now())
 
   @@index([companyId])
   @@index([createdById])

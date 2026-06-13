@@ -12,6 +12,8 @@ async function main() {
 
   await prisma.company.upsert({
     where: { id: "PSMS" },
+    // NOTE: nextSerial is only set on first creation. Set the starting number to
+    // continue from your existing manual sequence (e.g. 8 if 07 was the last one).
     create: {
       id: "PSMS",
       name: "ProSynergy Medical Systems Pvt Ltd",
@@ -47,6 +49,9 @@ async function main() {
   });
 
   // --- Admin user ---
+  // Upsert so the admin login always matches SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD
+  // after a deploy. This guarantees you can always get in by setting those two
+  // environment variables and redeploying.
   const email = (process.env.SEED_ADMIN_EMAIL || "admin@propharmamaldives.com").toLowerCase();
   const name = process.env.SEED_ADMIN_NAME || "Administrator";
   const password = process.env.SEED_ADMIN_PASSWORD || "change-this-password";
