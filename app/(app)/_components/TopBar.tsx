@@ -20,6 +20,7 @@ export default function TopBar({
   const links = [
     { href: "/dashboard", label: "Requests" },
     { href: "/new", label: "New request" },
+    { href: "/transfer/new", label: "New transfer" },
     ...(canManageSuppliers ? [{ href: "/suppliers", label: "Suppliers" }] : []),
     ...(canManageBankAccounts ? [{ href: "/bank-accounts", label: "Bank accounts" }] : []),
     ...(role === "ADMIN" ? [{ href: "/admin", label: "Admin" }] : []),

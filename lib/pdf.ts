@@ -13,6 +13,7 @@ export type RequestForPdf = {
   approvedBy: string;
   transfers: Transfer[];
   status: "PENDING" | "PAID";
+  docType?: string;
   requestedSignature?: Uint8Array | null;
   approvedSignature?: Uint8Array | null;
 };
@@ -38,17 +39,22 @@ export async function generateRequestPdf(templateBytes: Uint8Array, data: Reques
     }
   };
 
+  const isTransfer = data.docType === "TRF";
+
   let y = height - 185;
-  page.drawText(`Dollar Purchase \u2013 ${data.companyName}`, { x: MARGIN, y, size: 13, font: bold, color: COLOR_INK });
+  const title = isTransfer ? "Transfer" : "Dollar Purchase";
+  page.drawText(`${title} \u2013 ${data.companyName}`, { x: MARGIN, y, size: 13, font: bold, color: COLOR_INK });
   y -= 38;
   page.drawText(`Date: ${formatDate(data.date)}`, { x: MARGIN, y, size: 11, font, color: COLOR_INK });
   y -= 22;
   page.drawText(`Ref No: ${data.refNo}`, { x: MARGIN, y, size: 11, font, color: COLOR_INK });
   y -= 40;
-  page.drawText(`Purchase of USD ${formatAmount(data.usdAmount)} from ${data.source} at ${data.rate}`, {
-    x: MARGIN, y, size: 11, font, color: COLOR_INK,
-  });
-  y -= 38;
+  if (!isTransfer) {
+    page.drawText(`Purchase of USD ${formatAmount(data.usdAmount)} from ${data.source} at ${data.rate}`, {
+      x: MARGIN, y, size: 11, font, color: COLOR_INK,
+    });
+    y -= 38;
+  }
   for (const t of data.transfers) {
     drawSegs(
       [{ text: "Transfer from " }, { text: t.sourceAccount || data.sourceAccount, bold: true }, { text: ` to ${t.recipient} A/C No. ${t.account}` }],
@@ -57,7 +63,8 @@ export async function generateRequestPdf(templateBytes: Uint8Array, data: Reques
     y -= 24;
     t.amounts.forEach((amt, i) => {
       page.drawText(`${i + 1})`, { x: MARGIN + 22, y, size: 11, font, color: COLOR_INK });
-      page.drawText(formatAmount(amt), { x: MARGIN + 44, y, size: 11, font, color: COLOR_INK });
+      const note = t.notes && t.notes[i] ? ` - ${t.notes[i]}` : "";
+      page.drawText(`${formatAmount(amt)}${note}`, { x: MARGIN + 44, y, size: 11, font, color: COLOR_INK });
       y -= 20;
     });
     y -= 8;

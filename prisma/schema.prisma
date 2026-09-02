@@ -86,6 +86,7 @@ model Request {
   id            String        @id @default(cuid())
   refNo         String        @unique
   serial        Int
+  docType       String        @default("DEX") // "DEX" = dollar purchase, "TRF" = internal transfer
   company       Company       @relation(fields: [companyId], references: [id])
   companyId     String
   date          DateTime

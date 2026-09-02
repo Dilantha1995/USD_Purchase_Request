@@ -25,7 +25,7 @@ export async function GET(
     0
   );
   const expected = request.usdAmount * request.rate;
-  if (Math.abs(transferTotal - expected) > 0.5) {
+  if (request.docType !== "TRF" && Math.abs(transferTotal - expected) > 0.5) {
     return new Response(
       `Cannot print: the transfer amounts (MVR ${transferTotal.toLocaleString("en-US")}) do not match USD ${request.usdAmount.toLocaleString("en-US")} x ${request.rate} = MVR ${expected.toLocaleString("en-US")}. Please correct the amounts before printing.`,
       { status: 409, headers: { "Content-Type": "text/plain; charset=utf-8" } }
@@ -46,6 +46,7 @@ export async function GET(
       approvedBy: request.approvedBy,
       transfers: request.transfers as unknown as Transfer[],
       status: request.status,
+      docType: request.docType,
     }
   );
 

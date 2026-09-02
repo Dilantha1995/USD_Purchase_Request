@@ -25,7 +25,8 @@ export default async function RequestDetail({ params }: { params: { id: string }
   const transfers = r.transfers as unknown as Transfer[];
   const transferTotal = totalMvr(transfers);
   const expected = r.usdAmount * r.rate;
-  const mismatch = Math.abs(transferTotal - expected) > 0.5;
+  const isTransfer = r.docType === "TRF";
+  const mismatch = !isTransfer && Math.abs(transferTotal - expected) > 0.5;
 
   return (
     <div className="space-y-5">
@@ -54,7 +55,7 @@ export default async function RequestDetail({ params }: { params: { id: string }
             </a>
           )}
           <StatusActions id={r.id} initialStatus={r.status} />
-          {canEdit && (
+          {canEdit && !isTransfer && (
             <Link href={`/requests/${r.id}/edit`} className="btn-ghost">Edit</Link>
           )}
           {canDelete && <DeleteRequest id={r.id} refNo={r.refNo} />}
@@ -80,9 +81,11 @@ export default async function RequestDetail({ params }: { params: { id: string }
               {r.status === "PAID" ? "Paid" : "Pending"}
             </span>
           </Row>
-          <Row label="Purchase">
-            USD {formatAmount(r.usdAmount)} from {r.source} at {r.rate}
-          </Row>
+          {!isTransfer && (
+            <Row label="Purchase">
+              USD {formatAmount(r.usdAmount)} from {r.source} at {r.rate}
+            </Row>
+          )}
           <Row label="Transfer from">{r.sourceAccount}</Row>
           {r.exchangeLoss != null && (
             <Row label="Exchange loss (vs bank rate)">

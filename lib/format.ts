@@ -3,6 +3,7 @@ export type Transfer = {
   account: string;
   amounts: number[];
   sourceAccount?: string;
+  notes?: string[];
 };
 
 /** 4,000 / 61,680.00 -> grouped with commas. Keeps up to 2 decimals only if needed. */
@@ -23,11 +24,11 @@ export function formatDate(d: Date | string): string {
 }
 
 /** Builds e.g. PSMS/DEX/2606/07 from prefix "PSMS", a date, and a serial. */
-export function buildRefNo(prefix: string, date: Date, serial: number): string {
+export function buildRefNo(prefix: string, date: Date, serial: number, segment: string = "DEX"): string {
   const yy = String(date.getUTCFullYear()).slice(-2);
   const mm = String(date.getUTCMonth() + 1).padStart(2, "0");
   const nn = String(serial).padStart(2, "0");
-  return `${prefix}/DEX/${yy}${mm}/${nn}`;
+  return `${prefix}/${segment}/${yy}${mm}/${nn}`;
 }
 
 /** Sum of every amount across all transfer lines. */

@@ -28,6 +28,7 @@ function clean(t: any): Transfer[] {
       amounts: (Array.isArray(g?.amounts) ? g.amounts : [])
         .map((a: any) => Number(a))
         .filter((a: number) => Number.isFinite(a) && a > 0),
+      notes: Array.isArray(g?.notes) ? g.notes.map((n: any) => String(n ?? "").trim()) : undefined,
     }))
     .filter((g) => g.recipient && g.account && g.amounts.length > 0);
 }
@@ -36,20 +37,24 @@ export async function POST(req: Request) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const body = (await req.json().catch(() => ({}))) as Body;
+  const body = (await req.json().catch(() => ({}))) as Body & { docType?: string };
   const transfers = clean(body.transfers);
+  const isTransfer = body.docType === "TRF";
+  const segment = isTransfer ? "TRF" : "DEX";
 
-  const usdAmount = Number(body.usdAmount);
-  const rate = Number(body.rate);
+  const usdAmount = isTransfer ? 0 : Number(body.usdAmount);
+  const rate = isTransfer ? 0 : Number(body.rate);
   const date = body.date ? new Date(body.date) : new Date();
 
   if (!body.companyId) return NextResponse.json({ error: "Choose a company" }, { status: 400 });
-  if (!Number.isFinite(usdAmount) || usdAmount <= 0)
-    return NextResponse.json({ error: "Enter a valid USD amount" }, { status: 400 });
-  if (!Number.isFinite(rate) || rate <= 0)
-    return NextResponse.json({ error: "Enter a valid rate" }, { status: 400 });
-  if (!body.source?.trim())
-    return NextResponse.json({ error: "Enter where the USD is purchased from" }, { status: 400 });
+  if (!isTransfer) {
+    if (!Number.isFinite(usdAmount) || usdAmount <= 0)
+      return NextResponse.json({ error: "Enter a valid USD amount" }, { status: 400 });
+    if (!Number.isFinite(rate) || rate <= 0)
+      return NextResponse.json({ error: "Enter a valid rate" }, { status: 400 });
+    if (!body.source?.trim())
+      return NextResponse.json({ error: "Enter where the USD is purchased from" }, { status: 400 });
+  }
   const derivedSourceAccount = (body.sourceAccount?.trim() || transfers[0]?.sourceAccount || "").trim();
   if (!derivedSourceAccount)
     return NextResponse.json({ error: "Choose a transfer-from account for the transfers" }, { status: 400 });
@@ -72,20 +77,21 @@ export async function POST(req: Request) {
 
       const settings = await tx.settings.findUnique({ where: { id: "default" } });
       const bankRate = settings?.defaultBankRate ?? 15.42;
-      const exchangeLoss = (rate - bankRate) * usdAmount;
+      const exchangeLoss = isTransfer ? null : (rate - bankRate) * usdAmount;
 
-      const refNo = buildRefNo(company.refPrefix, date, serial);
+      const refNo = buildRefNo(company.refPrefix, date, serial, segment);
       const request = await tx.request.create({
         data: {
           refNo,
           serial,
+          docType: segment,
           companyId: company.id,
           date,
           usdAmount,
           rate,
-          bankRate,
+          bankRate: isTransfer ? null : bankRate,
           exchangeLoss,
-          source: body.source.trim(),
+          source: isTransfer ? (body.source?.trim() || "Internal Transfer") : body.source.trim(),
           sourceAccount: derivedSourceAccount,
           requestedBy: body.requestedBy?.trim() || session.name,
           approvedBy: body.approvedBy?.trim() || "",
