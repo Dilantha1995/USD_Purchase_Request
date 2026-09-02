@@ -54,6 +54,7 @@ model Supplier {
   accountName String?
   accountNo   String?
   notes       String?
+  accounts    Json?     // [{ name, bankName, accountNo }] — the supplier's beneficiary companies/accounts
   active      Boolean   @default(true)
   createdAt   DateTime  @default(now())
 }

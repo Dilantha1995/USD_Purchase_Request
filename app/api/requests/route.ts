@@ -24,6 +24,7 @@ function clean(t: any): Transfer[] {
     .map((g) => ({
       recipient: String(g?.recipient ?? "").trim(),
       account: String(g?.account ?? "").trim(),
+      sourceAccount: String(g?.sourceAccount ?? "").trim(),
       amounts: (Array.isArray(g?.amounts) ? g.amounts : [])
         .map((a: any) => Number(a))
         .filter((a: number) => Number.isFinite(a) && a > 0),
@@ -49,8 +50,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Enter a valid rate" }, { status: 400 });
   if (!body.source?.trim())
     return NextResponse.json({ error: "Enter where the USD is purchased from" }, { status: 400 });
-  if (!body.sourceAccount?.trim())
-    return NextResponse.json({ error: "Enter the transfer-from account" }, { status: 400 });
+  const derivedSourceAccount = (body.sourceAccount?.trim() || transfers[0]?.sourceAccount || "").trim();
+  if (!derivedSourceAccount)
+    return NextResponse.json({ error: "Choose a transfer-from account for the transfers" }, { status: 400 });
   if (transfers.length === 0)
     return NextResponse.json({ error: "Add at least one transfer with an amount" }, { status: 400 });
 
@@ -84,7 +86,7 @@ export async function POST(req: Request) {
           bankRate,
           exchangeLoss,
           source: body.source.trim(),
-          sourceAccount: body.sourceAccount.trim(),
+          sourceAccount: derivedSourceAccount,
           requestedBy: body.requestedBy?.trim() || session.name,
           approvedBy: body.approvedBy?.trim() || "",
           transfers: transfers as any,

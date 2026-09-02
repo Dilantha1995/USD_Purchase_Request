@@ -13,8 +13,8 @@ export async function GET() {
   });
   // include whether a signature image exists, without sending the bytes
   const withFlag = await prisma.signatory.findMany({ select: { id: true, signature: true } });
-  const has = new Map(withFlag.map((s) => [s.id, !!s.signature]));
-  return NextResponse.json(people.map((p) => ({ ...p, hasSignature: has.get(p.id) || false })));
+  const has = new Map(withFlag.map((s: (typeof withFlag)[number]) => [s.id, !!s.signature]));
+  return NextResponse.json(people.map((p: (typeof people)[number]) => ({ ...p, hasSignature: has.get(p.id) || false })));
 }
 
 // Create - ADMIN only. signature is optional base64 data URL.

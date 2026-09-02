@@ -10,6 +10,7 @@ function cleanTransfers(t: any) {
     .map((g) => ({
       recipient: String(g?.recipient ?? "").trim(),
       account: String(g?.account ?? "").trim(),
+      sourceAccount: String(g?.sourceAccount ?? "").trim(),
       supplierId: g?.supplierId || null,
       amounts: (Array.isArray(g?.amounts) ? g.amounts : [])
         .map((a: any) => Number(a))
@@ -31,14 +32,21 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     const transfers = cleanTransfers(b.transfers);
     if (transfers.length === 0)
       return NextResponse.json({ error: "Add at least one transfer with an amount" }, { status: 400 });
+    const usd = Number(b.usdAmount);
+    const rt = Number(b.rate);
+    const settings = await prisma.settings.findUnique({ where: { id: "default" } });
+    const bankRate = settings?.defaultBankRate ?? 15.42;
+    const srcAcct = (String(b.sourceAccount || "").trim() || transfers[0]?.sourceAccount || "").trim();
     const updated = await prisma.request.update({
       where: { id: params.id },
       data: {
         date: b.date ? new Date(b.date) : undefined,
-        usdAmount: Number(b.usdAmount),
-        rate: Number(b.rate),
+        usdAmount: usd,
+        rate: rt,
+        bankRate,
+        exchangeLoss: (rt - bankRate) * usd,
         source: String(b.source || "").trim(),
-        sourceAccount: String(b.sourceAccount || "").trim(),
+        sourceAccount: srcAcct,
         requestedBy: String(b.requestedBy || "").trim(),
         approvedBy: String(b.approvedBy || "").trim(),
         requestedSignatoryId: b.requestedSignatoryId || null,

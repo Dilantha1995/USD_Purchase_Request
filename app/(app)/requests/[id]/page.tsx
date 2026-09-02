@@ -12,6 +12,7 @@ export default async function RequestDetail({ params }: { params: { id: string }
   const me = await getCurrentUser();
   const isAdmin = me?.role === "ADMIN";
   const canDelete = isAdmin || Boolean(me?.canDeleteRequests);
+  const canEdit = isAdmin || Boolean(me?.canEditRequests);
   const r = await prisma.request.findUnique({
     where: { id: params.id },
     include: {
@@ -53,6 +54,9 @@ export default async function RequestDetail({ params }: { params: { id: string }
             </a>
           )}
           <StatusActions id={r.id} initialStatus={r.status} />
+          {canEdit && (
+            <Link href={`/requests/${r.id}/edit`} className="btn-ghost">Edit</Link>
+          )}
           {canDelete && <DeleteRequest id={r.id} refNo={r.refNo} />}
         </div>
       </div>

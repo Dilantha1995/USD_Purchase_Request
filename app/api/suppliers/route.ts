@@ -22,7 +22,19 @@ export async function POST(req: Request) {
       accountName: b.accountName?.trim() || null,
       accountNo: b.accountNo?.trim() || null,
       notes: b.notes?.trim() || null,
+      accounts: cleanAccounts(b.accounts) as any,
     },
   });
   return NextResponse.json(s);
+}
+
+function cleanAccounts(a: any) {
+  if (!Array.isArray(a)) return [];
+  return a
+    .map((x) => ({
+      name: String(x?.name ?? "").trim(),
+      bankName: String(x?.bankName ?? "").trim(),
+      accountNo: String(x?.accountNo ?? "").trim(),
+    }))
+    .filter((x) => x.name || x.accountNo);
 }

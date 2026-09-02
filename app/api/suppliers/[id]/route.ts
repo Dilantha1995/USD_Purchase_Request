@@ -13,6 +13,16 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     if (f in b) data[f] = b[f]?.trim() || (f === "name" ? undefined : null);
   }
   if ("active" in b) data.active = Boolean(b.active);
+  if ("accounts" in b) {
+    const a = Array.isArray(b.accounts) ? b.accounts : [];
+    data.accounts = a
+      .map((x: any) => ({
+        name: String(x?.name ?? "").trim(),
+        bankName: String(x?.bankName ?? "").trim(),
+        accountNo: String(x?.accountNo ?? "").trim(),
+      }))
+      .filter((x: any) => x.name || x.accountNo);
+  }
   const s = await prisma.supplier.update({ where: { id: params.id }, data });
   return NextResponse.json(s);
 }

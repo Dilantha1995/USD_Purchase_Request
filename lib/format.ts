@@ -2,6 +2,7 @@ export type Transfer = {
   recipient: string;
   account: string;
   amounts: number[];
+  sourceAccount?: string;
 };
 
 /** 4,000 / 61,680.00 -> grouped with commas. Keeps up to 2 decimals only if needed. */
