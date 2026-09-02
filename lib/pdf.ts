@@ -70,7 +70,8 @@ export async function generateRequestPdf(templateBytes: Uint8Array, data: Reques
     y -= 8;
   }
 
-  const sigLabelY = Math.min(y - 70, 230);
+  // Signature block pinned near the bottom of the page (drops just below content only if the body is very long)
+  const sigLabelY = Math.min(150, y - 40);
   const rightX = 330;
 
   // Signature images (only when completed)
