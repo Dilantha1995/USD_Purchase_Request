@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 type Company = { id: string; name: string; refPrefix: string; brandColor: string; nextSerial: number };
@@ -20,6 +20,15 @@ export default function AdminPanel({
   return (
     <div className="space-y-8">
       <h1 className="text-xl font-semibold">Admin</h1>
+
+      <section className="space-y-3">
+        <h2 className="text-sm font-semibold text-slate-700">Default bank rate</h2>
+        <p className="text-sm text-slate-500">
+          The official bank rate used to calculate exchange loss on each request
+          (exchange loss = (buying rate − bank rate) × USD). This is recorded in the app, not printed on the document.
+        </p>
+        <BankRateCard />
+      </section>
 
       <section className="space-y-3">
         <h2 className="text-sm font-semibold text-slate-700">Reference numbering</h2>
@@ -57,6 +66,43 @@ export default function AdminPanel({
         </div>
         <AddUser onCreated={() => router.refresh()} />
       </section>
+    </div>
+  );
+}
+
+function BankRateCard() {
+  const [val, setVal] = useState("");
+  const [loaded, setLoaded] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  useEffect(() => {
+    fetch("/api/settings")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (d) { setVal(String(d.defaultBankRate)); setLoaded(true); } });
+  }, []);
+
+  async function save() {
+    setBusy(true); setMsg("");
+    const res = await fetch("/api/settings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ defaultBankRate: Number(val) }),
+    });
+    setBusy(false);
+    if (res.ok) setMsg("Saved");
+    else { const d = await res.json().catch(() => ({})); setMsg(d.error || "Could not save"); }
+  }
+
+  return (
+    <div className="card max-w-sm p-4">
+      <label className="label">Default bank rate (MVR per USD)</label>
+      <div className="flex items-center gap-2">
+        <input type="number" step="0.0001" min="0" className="input w-32" value={val}
+          onChange={(e) => setVal(e.target.value)} disabled={!loaded} placeholder="15.42" />
+        <button onClick={save} disabled={busy || !loaded} className="btn-primary">Save</button>
+        {msg && <span className="text-xs text-slate-500">{msg}</span>}
+      </div>
     </div>
   );
 }

@@ -64,6 +64,13 @@ async function main() {
   });
   console.log(`Admin user ready: ${email}`);
 
+  // --- Global settings (default bank rate) ---
+  await prisma.settings.upsert({
+    where: { id: "default" },
+    create: { id: "default", defaultBankRate: 15.42 },
+    update: {},
+  });
+
   console.log("Seed complete.");
 }
 

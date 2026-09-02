@@ -68,6 +68,10 @@ export async function POST(req: Request) {
       const sameMonth = company.serialPeriod === period || company.serialPeriod == null;
       const serial = sameMonth ? company.nextSerial : 1;
 
+      const settings = await tx.settings.findUnique({ where: { id: "default" } });
+      const bankRate = settings?.defaultBankRate ?? 15.42;
+      const exchangeLoss = (rate - bankRate) * usdAmount;
+
       const refNo = buildRefNo(company.refPrefix, date, serial);
       const request = await tx.request.create({
         data: {
@@ -77,6 +81,8 @@ export async function POST(req: Request) {
           date,
           usdAmount,
           rate,
+          bankRate,
+          exchangeLoss,
           source: body.source.trim(),
           sourceAccount: body.sourceAccount.trim(),
           requestedBy: body.requestedBy?.trim() || session.name,

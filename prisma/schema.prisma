@@ -90,6 +90,8 @@ model Request {
   date          DateTime
   usdAmount     Float
   rate          Float
+  bankRate      Float?        // default bank rate snapshot at creation
+  exchangeLoss  Float?        // (rate - bankRate) * usdAmount, recorded for accounting (not printed)
   source        String
   sourceAccount String
   requestedBy   String
@@ -110,4 +112,9 @@ model Request {
 
   @@index([companyId])
   @@index([createdById])
+}
+
+model Settings {
+  id              String @id @default("default")
+  defaultBankRate Float  @default(15.42)
 }
