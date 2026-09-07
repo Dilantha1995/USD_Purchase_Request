@@ -24,20 +24,10 @@ export default async function RequestDetail({ params }: { params: { id: string }
   if (!r) notFound();
 
   const transfers = r.transfers as unknown as Transfer[];
-  const transferTotal = totalMvr(transfers);
-  const expected = r.usdAmount * r.rate;
   const isTransfer = r.docType === "TRF";
-  const mismatch = !isTransfer && Math.abs(transferTotal - expected) > 0.5;
 
   return (
     <div className="space-y-5">
-      {mismatch && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          <strong>Amounts don&apos;t match — this document can&apos;t be printed.</strong> The transfer amounts total
-          MVR {formatAmount(transferTotal)}, but USD {formatAmount(r.usdAmount)} × {r.rate} = MVR {formatAmount(expected)}.
-          Fix the transfer amounts so they match, then the PDF will be available.
-        </div>
-      )}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <Link href="/dashboard" className="text-sm text-slate-500 hover:underline">
@@ -46,15 +36,9 @@ export default async function RequestDetail({ params }: { params: { id: string }
           <h1 className="mt-1 font-mono text-lg font-semibold">{r.refNo}</h1>
         </div>
         <div className="flex items-center gap-2">
-          {mismatch ? (
-            <span className="btn-ghost cursor-not-allowed opacity-40" title="Fix the amount mismatch to enable printing">
-              Download PDF
-            </span>
-          ) : (
-            <a href={`/api/requests/${r.id}/pdf?download=1`} className="btn-ghost">
-              Download PDF
-            </a>
-          )}
+          <a href={`/api/requests/${r.id}/pdf?download=1`} className="btn-ghost">
+            Download PDF
+          </a>
           <StatusActions id={r.id} initialStatus={r.status} />
           {canEdit && !isTransfer && (
             <Link href={`/requests/${r.id}/edit`} className="btn-ghost">Edit</Link>

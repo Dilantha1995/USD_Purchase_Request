@@ -18,20 +18,6 @@ export async function GET(
   });
   if (!request) return new Response("Not found", { status: 404 });
 
-  // Guard: transfer amounts must equal USD x rate, otherwise the document can't be printed.
-  const transferList = request.transfers as unknown as Transfer[];
-  const transferTotal = transferList.reduce(
-    (s, t) => s + t.amounts.reduce((a: number, b: number) => a + (Number(b) || 0), 0),
-    0
-  );
-  const expected = request.usdAmount * request.rate;
-  if (request.docType !== "TRF" && Math.abs(transferTotal - expected) > 0.5) {
-    return new Response(
-      `Cannot print: the transfer amounts (MVR ${transferTotal.toLocaleString("en-US")}) do not match USD ${request.usdAmount.toLocaleString("en-US")} x ${request.rate} = MVR ${expected.toLocaleString("en-US")}. Please correct the amounts before printing.`,
-      { status: 409, headers: { "Content-Type": "text/plain; charset=utf-8" } }
-    );
-  }
-
   const pdfBytes = await generateRequestPdf(
     new Uint8Array(request.company.templatePdf),
     {

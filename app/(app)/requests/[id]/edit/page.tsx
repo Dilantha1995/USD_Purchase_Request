@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { Transfer } from "@/lib/format";
+import { getAssignableDeals } from "@/lib/deal";
 import NewRequestForm from "../../../new/NewRequestForm";
 
 export const dynamic = "force-dynamic";
@@ -22,6 +23,7 @@ export default async function EditRequestPage({ params }: { params: { id: string
     prisma.bankAccount.findMany({ where: { active: true }, select: { id: true, label: true, companyId: true }, orderBy: { label: "asc" } }),
   ]);
   if (!r) notFound();
+  const deals = await getAssignableDeals(r.dealId);
 
   const transfers = (r.transfers as unknown as Transfer[]).map((t) => ({
     sourceAccount: t.sourceAccount || r.sourceAccount || "",
@@ -39,6 +41,7 @@ export default async function EditRequestPage({ params }: { params: { id: string
     usdAmount: String(r.usdAmount),
     rate: String(r.rate),
     source: r.source,
+    dealId: r.dealId,
     requestedBy: r.requestedBy,
     approvedBy: r.approvedBy,
     transfers,
@@ -49,6 +52,7 @@ export default async function EditRequestPage({ params }: { params: { id: string
       companies={companies}
       suppliers={suppliers as any}
       bankAccounts={bankAccounts}
+      deals={deals}
       defaultRequestedBy={me?.name || ""}
       existing={existing}
     />

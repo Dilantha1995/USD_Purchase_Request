@@ -29,6 +29,8 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   if (b._edit) {
     if (!(await can("canEditRequests")))
       return NextResponse.json({ error: "You don't have access to edit requests" }, { status: 403 });
+    const existing = await prisma.request.findUnique({ where: { id: params.id }, select: { companyId: true } });
+    if (!existing) return NextResponse.json({ error: "Request not found" }, { status: 404 });
     const transfers = cleanTransfers(b.transfers);
     if (transfers.length === 0)
       return NextResponse.json({ error: "Add at least one transfer with an amount" }, { status: 400 });
@@ -37,6 +39,15 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     const settings = await prisma.settings.findUnique({ where: { id: "default" } });
     const bankRate = settings?.defaultBankRate ?? 15.42;
     const srcAcct = (String(b.sourceAccount || "").trim() || transfers[0]?.sourceAccount || "").trim();
+
+    const dealId = b.dealId?.trim() || null;
+    if (dealId) {
+      const deal = await prisma.deal.findUnique({ where: { id: dealId } });
+      if (!deal) return NextResponse.json({ error: "Selected deal not found" }, { status: 400 });
+      if (deal.companyId !== existing.companyId)
+        return NextResponse.json({ error: "Selected deal belongs to a different company" }, { status: 400 });
+    }
+
     const updated = await prisma.request.update({
       where: { id: params.id },
       data: {
@@ -47,6 +58,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
         exchangeLoss: (rt - bankRate) * usd,
         source: String(b.source || "").trim(),
         sourceAccount: srcAcct,
+        dealId,
         requestedBy: String(b.requestedBy || "").trim(),
         approvedBy: String(b.approvedBy || "").trim(),
         requestedSignatoryId: b.requestedSignatoryId || null,

@@ -20,6 +20,7 @@ type Existing = {
   usdAmount: string;
   rate: string;
   source: string;
+  dealId?: string | null;
   requestedBy: string;
   approvedBy: string;
   transfers: TransferDraft[];
@@ -44,17 +45,19 @@ export default function NewRequestForm({
   const router = useRouter();
   const isEdit = !!existing;
   const allDeals = deals || [];
+  const linkedDeal = existing?.dealId ? allDeals.find((d) => d.id === existing.dealId) : undefined;
   const preselectedDeal = !isEdit && defaultDealId ? allDeals.find((d) => d.id === defaultDealId) : undefined;
+  const initialDeal = linkedDeal ?? preselectedDeal;
 
-  const [companyId, setCompanyId] = useState(existing?.companyId ?? preselectedDeal?.companyId ?? companies[0]?.id ?? "");
+  const [companyId, setCompanyId] = useState(existing?.companyId ?? initialDeal?.companyId ?? companies[0]?.id ?? "");
   const company = companies.find((c) => c.id === companyId);
 
   const [date, setDate] = useState(existing?.date ?? todayISO());
   const [usdAmount, setUsdAmount] = useState(existing?.usdAmount ?? "");
-  const [rate, setRate] = useState(existing?.rate ?? (preselectedDeal ? String(preselectedDeal.rate) : ""));
-  const [dealId, setDealId] = useState(preselectedDeal?.id ?? "");
+  const [rate, setRate] = useState(existing?.rate ?? (initialDeal ? String(initialDeal.rate) : ""));
+  const [dealId, setDealId] = useState(initialDeal?.id ?? "");
   const [supplierId, setSupplierId] = useState(() => {
-    if (preselectedDeal) return preselectedDeal.supplierId;
+    if (initialDeal) return initialDeal.supplierId;
     if (!existing) return "";
     const m = suppliers.find((s) => s.name === existing.source);
     return m?.id ?? "";
@@ -193,25 +196,23 @@ export default function NewRequestForm({
       )}
 
       {/* Deal */}
-      {!isEdit && (
-        <div className="card space-y-3 p-5">
-          <label className="label">Part of a deal? (optional — pays down an existing dollar purchase agreement)</label>
-          <select className="input" value={dealId} onChange={(e) => pickDeal(e.target.value)}>
-            <option value="">— Standalone purchase, not part of a deal —</option>
-            {dealsForCompany.map((d) => (
-              <option key={d.id} value={d.id}>{d.refNo} — {d.name} (MVR pending {formatAmount(Math.max(d.mvrPending, 0))})</option>
-            ))}
-          </select>
-          {selectedDeal && (
-            <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
-              Deal rate <strong>{selectedDeal.rate}</strong> — MVR pending <strong>{formatAmount(Math.max(selectedDeal.mvrPending, 0))}</strong>
-              {" · "}USD {selectedDeal.usdPending < -0.5 ? "received in advance" : "pending"}{" "}
-              <strong>{formatAmount(Math.abs(selectedDeal.usdPending))}</strong>.{" "}
-              <a href={`/deals/${selectedDeal.id}`} className="underline">View deal</a>
-            </p>
-          )}
-        </div>
-      )}
+      <div className="card space-y-3 p-5">
+        <label className="label">Part of a deal? (optional — pays down an existing dollar purchase agreement)</label>
+        <select className="input" value={dealId} onChange={(e) => pickDeal(e.target.value)}>
+          <option value="">— Standalone purchase, not part of a deal —</option>
+          {dealsForCompany.map((d) => (
+            <option key={d.id} value={d.id}>{d.refNo} — {d.name} (MVR pending {formatAmount(Math.max(d.mvrPending, 0))})</option>
+          ))}
+        </select>
+        {selectedDeal && (
+          <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+            Deal rate <strong>{selectedDeal.rate}</strong> — MVR pending <strong>{formatAmount(Math.max(selectedDeal.mvrPending, 0))}</strong>
+            {" · "}USD {selectedDeal.usdPending < -0.5 ? "received in advance" : "pending"}{" "}
+            <strong>{formatAmount(Math.abs(selectedDeal.usdPending))}</strong>.{" "}
+            <a href={`/deals/${selectedDeal.id}`} className="underline">View deal</a>
+          </p>
+        )}
+      </div>
 
       {/* Purchase details */}
       <div className="card space-y-4 p-5">
@@ -250,7 +251,7 @@ export default function NewRequestForm({
         </div>
         {mvrMismatch && (
           <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
-            USD × rate = {formatAmount(expectedMvr)}, but the transfer amounts add up to {formatAmount(totalMvr)}. They must match before the document can be printed.
+            USD × rate = {formatAmount(expectedMvr)}, but the transfer amounts add up to {formatAmount(totalMvr)}. That&apos;s fine for a partial deal payment — just double-check it&apos;s intentional.
           </p>
         )}
 
