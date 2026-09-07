@@ -69,7 +69,7 @@ export default function InternalTransferForm({
   }
 
   return (
-    <form onSubmit={submit} className="space-y-6">
+    <form onSubmit={submit} className="mx-auto max-w-5xl space-y-6">
       <datalist id="trfBanks">{companyBanks.map((b) => <option key={b.id} value={b.label} />)}</datalist>
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">New internal transfer</h1>

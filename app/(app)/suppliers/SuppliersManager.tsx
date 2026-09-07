@@ -71,7 +71,7 @@ export default function SuppliersManager() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-5xl space-y-6">
       <h1 className="text-xl font-semibold">Suppliers (USD sellers)</h1>
 
       <div className="card space-y-3 p-4">

@@ -43,7 +43,7 @@ export default function BankAccountsManager() {
   const coName = (id?: string | null) => COMPANIES.find((c) => c.id === id)?.name || "—";
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-5xl space-y-6">
       <h1 className="text-xl font-semibold">Our company bank accounts</h1>
 
       <div className="card space-y-3 p-4">

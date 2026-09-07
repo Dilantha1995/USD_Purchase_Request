@@ -170,7 +170,7 @@ export default function NewRequestForm({
   }
 
   return (
-    <form onSubmit={submit} className="space-y-6">
+    <form onSubmit={submit} className="mx-auto max-w-5xl space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">{isEdit ? "Edit request" : "New dollar purchase request"}</h1>
         {refPreview && <span className="rounded-md bg-slate-100 px-3 py-1.5 font-mono text-xs text-slate-600">{refPreview}</span>}

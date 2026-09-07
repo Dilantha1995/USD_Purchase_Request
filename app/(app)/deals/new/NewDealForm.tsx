@@ -62,7 +62,7 @@ export default function NewDealForm({ companies, suppliers }: { companies: Compa
   }
 
   return (
-    <form onSubmit={submit} className="space-y-6">
+    <form onSubmit={submit} className="mx-auto max-w-5xl space-y-6">
       <h1 className="text-xl font-semibold">New dollar purchase deal</h1>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

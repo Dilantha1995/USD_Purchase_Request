@@ -40,6 +40,7 @@ export default async function Dashboard({
     include: {
       company: { select: { id: true, name: true, brandColor: true } },
       createdBy: { select: { name: true } },
+      deal: { select: { id: true, refNo: true } },
     },
     orderBy: { createdAt: "desc" },
     take: 1000,
@@ -53,6 +54,7 @@ export default async function Dashboard({
           r.source,
           r.requestedBy,
           r.approvedBy,
+          r.deal?.refNo || "",
           ...transfers.map((t) => `${t.recipient} ${t.account}`),
         ]
           .join(" ")
@@ -136,6 +138,7 @@ export default async function Dashboard({
               <th className="px-4 py-3">Co.</th>
               <th className="px-4 py-3">Date</th>
               <th className="px-4 py-3">Supplier</th>
+              <th className="px-4 py-3">Deal</th>
               <th className="px-4 py-3 text-right">USD</th>
               <th className="px-4 py-3 text-right">Rate</th>
               <th className="px-4 py-3 text-right">Total MVR</th>
@@ -153,6 +156,13 @@ export default async function Dashboard({
                 </td>
                 <td className="px-4 py-3 text-slate-600">{formatDate(r.date)}</td>
                 <td className="px-4 py-3 text-slate-600">{r.source}</td>
+                <td className="px-4 py-3 font-mono text-xs">
+                  {r.deal ? (
+                    <Link href={`/deals/${r.deal.id}`} className="text-ink hover:underline">{r.deal.refNo}</Link>
+                  ) : (
+                    <span className="text-slate-300">—</span>
+                  )}
+                </td>
                 <td className="px-4 py-3 text-right">{formatAmount(r.usdAmount)}</td>
                 <td className="px-4 py-3 text-right">{r.rate}</td>
                 <td className="px-4 py-3 text-right">
@@ -179,7 +189,7 @@ export default async function Dashboard({
             ))}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={10} className="px-4 py-12 text-center text-sm text-slate-500">
+                <td colSpan={11} className="px-4 py-12 text-center text-sm text-slate-500">
                   No requests match. Try clearing the filters.
                 </td>
               </tr>

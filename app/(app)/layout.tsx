@@ -14,7 +14,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         canManageSuppliers={me.role === "ADMIN" || me.canManageSuppliers}
         canManageBankAccounts={me.role === "ADMIN" || me.canManageBankAccounts}
       />
-      <main className="mx-auto max-w-5xl px-4 py-6">{children}</main>
+      <main className="w-full px-6 py-6">{children}</main>
     </div>
   );
 }
