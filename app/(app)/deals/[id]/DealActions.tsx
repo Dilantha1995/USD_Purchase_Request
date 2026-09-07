@@ -115,6 +115,7 @@ export default function DealActions({
           Change rate / amount
         </button>
         <a href={`/api/deals/${dealId}/statement?download=1`} className="btn-ghost">Download statement</a>
+        <a href={`/api/deals/ledger-export?format=xlsx&dealId=${dealId}`} className="btn-ghost">Ledger (Excel)</a>
         <button type="button" className="btn-ghost" onClick={toggleStatus} disabled={busy}>
           {status === "OPEN" ? "Close deal" : "Reopen deal"}
         </button>

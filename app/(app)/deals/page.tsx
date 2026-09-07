@@ -21,15 +21,22 @@ function CompanyBadge({ id, name, color }: { id: string; name: string; color: st
 export default async function DealsPage({
   searchParams,
 }: {
-  searchParams: { company?: string; status?: string; q?: string };
+  searchParams: { company?: string; status?: string; q?: string; from?: string; to?: string };
 }) {
   const company = searchParams.company;
   const status = searchParams.status === "CLOSED" ? "CLOSED" : searchParams.status === "OPEN" ? "OPEN" : undefined;
   const q = (searchParams.q || "").trim().toLowerCase();
+  const from = searchParams.from || "";
+  const to = searchParams.to || "";
+
+  const dateFilter: { gte?: Date; lte?: Date } = {};
+  if (from) dateFilter.gte = new Date(`${from}T00:00:00Z`);
+  if (to) dateFilter.lte = new Date(`${to}T23:59:59Z`);
 
   const where: any = {};
   if (company === "PSMS" || company === "PPM") where.companyId = company;
   if (status) where.status = status;
+  if (from || to) where.date = dateFilter;
 
   const deals = await prisma.deal.findMany({
     where,
@@ -58,11 +65,24 @@ export default async function DealsPage({
     { agreedUsd: 0, agreedMvr: 0, mvrPaid: 0, usdReceived: 0 }
   );
 
+  const params = (extra: Record<string, string> = {}) => {
+    const sp = new URLSearchParams();
+    if (company) sp.set("company", company);
+    if (status) sp.set("status", status);
+    if (q) sp.set("q", searchParams.q || "");
+    if (from) sp.set("from", from);
+    if (to) sp.set("to", to);
+    for (const [k, v] of Object.entries(extra)) sp.set(k, v);
+    return sp.toString();
+  };
+
   const tab = (val: string | undefined, label: string, key: "company" | "status") => {
     const sp = new URLSearchParams();
     if (key === "company") { if (val) sp.set("company", val); if (status) sp.set("status", status); }
     else { if (company) sp.set("company", company); if (val) sp.set("status", val); }
     if (q) sp.set("q", searchParams.q || "");
+    if (from) sp.set("from", from);
+    if (to) sp.set("to", to);
     const active = key === "company" ? (company || "") === (val || "") : (status || "") === (val || "");
     return (
       <Link
@@ -78,7 +98,13 @@ export default async function DealsPage({
     <div>
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-semibold">Dollar purchase deals</h1>
-        <Link href="/deals/new" className="btn-primary">New deal</Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <a href={`/api/deals/export?format=xlsx&${params()}`} className="btn-ghost">Export Excel</a>
+          <a href={`/api/deals/export?format=pdf&${params()}`} className="btn-ghost">Export PDF</a>
+          <a href={`/api/deals/ledger-export?format=xlsx&${params()}`} className="btn-ghost">General ledger (Excel)</a>
+          <a href={`/api/deals/ledger-export?format=pdf&${params()}`} className="btn-ghost">General ledger (PDF)</a>
+          <Link href="/deals/new" className="btn-primary">New deal</Link>
+        </div>
       </div>
 
       <div className="card mb-4 flex flex-wrap items-center justify-between gap-3 p-3">
@@ -94,11 +120,22 @@ export default async function DealsPage({
         <form className="flex flex-wrap items-center gap-2" action="/deals">
           {company && <input type="hidden" name="company" value={company} />}
           {status && <input type="hidden" name="status" value={status} />}
+          <label className="flex items-center gap-1 text-xs text-slate-500">
+            From <input type="date" name="from" defaultValue={from} className="input w-36" />
+          </label>
+          <label className="flex items-center gap-1 text-xs text-slate-500">
+            To <input type="date" name="to" defaultValue={to} className="input w-36" />
+          </label>
           <input name="q" defaultValue={searchParams.q || ""} placeholder="Search ref, name, supplier…" className="input w-56" />
           <button className="btn-ghost">Apply</button>
-          {(company || status || q) && <Link href="/deals" className="text-xs text-slate-500 hover:underline">Clear</Link>}
+          {(company || status || q || from || to) && <Link href="/deals" className="text-xs text-slate-500 hover:underline">Clear</Link>}
         </form>
       </div>
+      {(from || to) && (
+        <p className="mb-3 text-xs text-slate-500">
+          Showing deals dated {from || "the start"} to {to || "today"}. The general ledger export instead filters by each transaction&apos;s own date within this period, across the deals shown here.
+        </p>
+      )}
 
       <div className="card overflow-hidden overflow-x-auto">
         <table className="w-full text-sm">
