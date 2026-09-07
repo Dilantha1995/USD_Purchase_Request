@@ -8,7 +8,8 @@ type Company = { id: string; name: string; refPrefix: string; brandColor: string
 type SupplierAccount = { name: string; bankName?: string; accountNo?: string };
 type Supplier = { id: string; name: string; accounts?: SupplierAccount[] | null };
 type BankAccount = { id: string; label: string; companyId?: string | null };
-type TransferDraft = { sourceAccount: string; recipient: string; bankName: string; account: string; amounts: string[] };
+type PaymentMethod = "BANK" | "CASH";
+type TransferDraft = { sourceAccount: string; recipient: string; bankName: string; account: string; paymentMethod: PaymentMethod; collectedBy: string; amounts: string[] };
 type Deal = { id: string; refNo: string; name: string; companyId: string; supplierId: string; rate: number; mvrPending: number; usdPending: number; pending: boolean; status?: "OPEN" | "CLOSED" };
 
 type Existing = {
@@ -52,6 +53,7 @@ export default function NewRequestForm({
   const [companyId, setCompanyId] = useState(existing?.companyId ?? initialDeal?.companyId ?? companies[0]?.id ?? "");
   const company = companies.find((c) => c.id === companyId);
 
+  const [refNo, setRefNo] = useState(existing?.refNo ?? "");
   const [date, setDate] = useState(existing?.date ?? todayISO());
   const [usdAmount, setUsdAmount] = useState(existing?.usdAmount ?? "");
   const [rate, setRate] = useState(existing?.rate ?? (initialDeal ? String(initialDeal.rate) : ""));
@@ -66,7 +68,7 @@ export default function NewRequestForm({
   const [requestedBy, setRequestedBy] = useState(existing?.requestedBy ?? defaultRequestedBy);
   const [approvedBy, setApprovedBy] = useState(existing?.approvedBy ?? "");
   const [transfers, setTransfers] = useState<TransferDraft[]>(
-    existing?.transfers?.length ? existing.transfers : [{ sourceAccount: "", recipient: "", bankName: "", account: "", amounts: [""] }]
+    existing?.transfers?.length ? existing.transfers : [{ sourceAccount: "", recipient: "", bankName: "", account: "", paymentMethod: "BANK", collectedBy: "", amounts: [""] }]
   );
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -98,7 +100,7 @@ export default function NewRequestForm({
   const effectiveSource = supplierId ? (selectedSupplier?.name ?? "") : source;
 
   const refPreview = useMemo(() => {
-    if (isEdit) return existing!.refNo;
+    if (isEdit) return refNo;
     if (!company) return "";
     const d = new Date(`${date}T00:00:00Z`);
     if (isNaN(d.getTime())) return "";
@@ -106,7 +108,7 @@ export default function NewRequestForm({
     const sameMonth = company.serialPeriod === period || company.serialPeriod == null;
     const serial = sameMonth ? company.nextSerial : 1;
     return buildRefNo(company.refPrefix, d, serial);
-  }, [company, date, isEdit, existing]);
+  }, [company, date, isEdit, refNo]);
 
   const totalMvr = useMemo(
     () => transfers.reduce((s, t) => s + t.amounts.reduce((a, b) => a + (parseFloat(b) || 0), 0), 0),
@@ -117,7 +119,7 @@ export default function NewRequestForm({
 
   const setTransfer = (i: number, patch: Partial<TransferDraft>) =>
     setTransfers((ts) => ts.map((t, idx) => (idx === i ? { ...t, ...patch } : t)));
-  const addTransfer = () => setTransfers((ts) => [...ts, { sourceAccount: ts[ts.length - 1]?.sourceAccount || "", recipient: "", bankName: "", account: "", amounts: [""] }]);
+  const addTransfer = () => setTransfers((ts) => [...ts, { sourceAccount: ts[ts.length - 1]?.sourceAccount || "", recipient: "", bankName: "", account: "", paymentMethod: "BANK", collectedBy: "", amounts: [""] }]);
   const removeTransfer = (i: number) => setTransfers((ts) => (ts.length > 1 ? ts.filter((_, idx) => idx !== i) : ts));
   const setAmount = (ti: number, ai: number, val: string) =>
     setTransfers((ts) => ts.map((t, idx) => (idx === ti ? { ...t, amounts: t.amounts.map((a, j) => (j === ai ? val : a)) } : t)));
@@ -148,12 +150,15 @@ export default function NewRequestForm({
         recipient: t.recipient,
         bankName: t.bankName,
         account: t.account,
+        paymentMethod: t.paymentMethod,
+        collectedBy: t.collectedBy,
         amounts: t.amounts.map((a) => parseFloat(a)).filter((n) => !isNaN(n) && n > 0),
       })),
     };
     let res: Response;
     if (isEdit) {
       payload._edit = true;
+      payload.refNo = refNo;
       res = await fetch(`/api/requests/${existing!.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
     } else {
       res = await fetch("/api/requests", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
@@ -178,7 +183,14 @@ export default function NewRequestForm({
 
       {/* Company */}
       {isEdit ? (
-        <div className="card p-4 text-sm">Company: <strong>{existing!.companyName}</strong> <span className="text-slate-400">(cannot change on edit)</span></div>
+        <div className="card space-y-3 p-4 text-sm">
+          <div>Company: <strong>{existing!.companyName}</strong> <span className="text-slate-400">(cannot change on edit)</span></div>
+          <div>
+            <label className="label">Reference number</label>
+            <input className="input font-mono sm:w-64" value={refNo} onChange={(e) => setRefNo(e.target.value)} required />
+            <p className="mt-1 text-xs text-slate-400">Changing this only relabels the document — it doesn&apos;t affect the automatic numbering sequence for new requests.</p>
+          </div>
+        </div>
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {companies.map((c) => {
@@ -261,11 +273,20 @@ export default function NewRequestForm({
 
         {transfers.map((t, ti) => (
           <div key={ti} className="card space-y-3 p-4">
-            <div>
-              <label className="label">Transfer from (our account) — pick or type</label>
-              <input className="input" list="companyBankAccounts" value={t.sourceAccount} onChange={(e) => setTransfer(ti, { sourceAccount: e.target.value })} placeholder="PSMS BML MVR" />
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <label className="label">Transfer from (our account) — pick or type</label>
+                <input className="input" list="companyBankAccounts" value={t.sourceAccount} onChange={(e) => setTransfer(ti, { sourceAccount: e.target.value })} placeholder="PSMS BML MVR" />
+              </div>
+              <div>
+                <label className="label">Payment method</label>
+                <select className="input" value={t.paymentMethod} onChange={(e) => setTransfer(ti, { paymentMethod: e.target.value as PaymentMethod })}>
+                  <option value="BANK">Bank transfer</option>
+                  <option value="CASH">Cash withdrawal</option>
+                </select>
+              </div>
             </div>
-            {supplierAccounts.length > 0 && (
+            {t.paymentMethod === "BANK" && supplierAccounts.length > 0 && (
               <div>
                 <label className="label">Choose supplier account</label>
                 <select className="input" defaultValue="" onChange={(e) => pickRecipientAccount(ti, e.target.value)}>
@@ -274,11 +295,18 @@ export default function NewRequestForm({
                 </select>
               </div>
             )}
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <div><label className="label">Recipient name</label><input className="input" value={t.recipient} onChange={(e) => setTransfer(ti, { recipient: e.target.value })} placeholder="Aishath Zoona" /></div>
-              <div><label className="label">Recipient bank</label><input className="input" value={t.bankName} onChange={(e) => setTransfer(ti, { bankName: e.target.value })} placeholder="BML" /></div>
-              <div><label className="label">Account number</label><input className="input" value={t.account} onChange={(e) => setTransfer(ti, { account: e.target.value })} placeholder="7703-215049-101" /></div>
-            </div>
+            {t.paymentMethod === "CASH" ? (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div><label className="label">Paid to</label><input className="input" value={t.recipient} onChange={(e) => setTransfer(ti, { recipient: e.target.value })} placeholder="Aishath Zoona" /></div>
+                <div><label className="label">Collected by</label><input className="input" value={t.collectedBy} onChange={(e) => setTransfer(ti, { collectedBy: e.target.value })} placeholder="Person who withdrew/handed over the cash" required /></div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div><label className="label">Recipient name</label><input className="input" value={t.recipient} onChange={(e) => setTransfer(ti, { recipient: e.target.value })} placeholder="Aishath Zoona" /></div>
+                <div><label className="label">Recipient bank</label><input className="input" value={t.bankName} onChange={(e) => setTransfer(ti, { bankName: e.target.value })} placeholder="BML" /></div>
+                <div><label className="label">Account number</label><input className="input" value={t.account} onChange={(e) => setTransfer(ti, { account: e.target.value })} placeholder="7703-215049-101" /></div>
+              </div>
+            )}
             <div>
               <label className="label">Amounts (MVR) — split into multiple lines if the bank needs separate transfers</label>
               <div className="space-y-2">

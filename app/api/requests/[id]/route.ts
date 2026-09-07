@@ -7,17 +7,22 @@ export const runtime = "nodejs";
 function cleanTransfers(t: any) {
   if (!Array.isArray(t)) return [];
   return t
-    .map((g) => ({
-      recipient: String(g?.recipient ?? "").trim(),
-      account: String(g?.account ?? "").trim(),
-      sourceAccount: String(g?.sourceAccount ?? "").trim(),
-      bankName: String(g?.bankName ?? "").trim() || undefined,
-      supplierId: g?.supplierId || null,
-      amounts: (Array.isArray(g?.amounts) ? g.amounts : [])
-        .map((a: any) => Number(a))
-        .filter((a: number) => Number.isFinite(a) && a > 0),
-    }))
-    .filter((g) => g.recipient && g.account && g.amounts.length > 0);
+    .map((g) => {
+      const paymentMethod = g?.paymentMethod === "CASH" ? "CASH" : "BANK";
+      return {
+        recipient: String(g?.recipient ?? "").trim(),
+        account: String(g?.account ?? "").trim(),
+        sourceAccount: String(g?.sourceAccount ?? "").trim(),
+        bankName: String(g?.bankName ?? "").trim() || undefined,
+        paymentMethod,
+        collectedBy: String(g?.collectedBy ?? "").trim() || undefined,
+        supplierId: g?.supplierId || null,
+        amounts: (Array.isArray(g?.amounts) ? g.amounts : [])
+          .map((a: any) => Number(a))
+          .filter((a: number) => Number.isFinite(a) && a > 0),
+      };
+    })
+    .filter((g) => g.recipient && g.amounts.length > 0 && (g.paymentMethod === "CASH" ? g.collectedBy : g.account));
 }
 
 // Toggle status (kept for backward compatibility) - any logged in user
@@ -49,9 +54,18 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
         return NextResponse.json({ error: "Selected deal belongs to a different company" }, { status: 400 });
     }
 
+    let refNo: string | undefined;
+    if (b.refNo !== undefined) {
+      refNo = String(b.refNo || "").trim();
+      if (!refNo) return NextResponse.json({ error: "Reference number can't be empty" }, { status: 400 });
+      const clash = await prisma.request.findFirst({ where: { refNo, NOT: { id: params.id } }, select: { id: true } });
+      if (clash) return NextResponse.json({ error: `Reference number "${refNo}" is already in use` }, { status: 400 });
+    }
+
     const updated = await prisma.request.update({
       where: { id: params.id },
       data: {
+        refNo,
         date: b.date ? new Date(b.date) : undefined,
         usdAmount: usd,
         rate: rt,

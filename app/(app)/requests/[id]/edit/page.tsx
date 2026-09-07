@@ -30,6 +30,8 @@ export default async function EditRequestPage({ params }: { params: { id: string
     recipient: t.recipient,
     bankName: t.bankName || "",
     account: t.account,
+    paymentMethod: t.paymentMethod === "CASH" ? ("CASH" as const) : ("BANK" as const),
+    collectedBy: t.collectedBy || "",
     amounts: t.amounts.map((a) => String(a)),
   }));
 

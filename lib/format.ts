@@ -4,6 +4,8 @@ export type Transfer = {
   amounts: number[];
   sourceAccount?: string;
   bankName?: string;
+  paymentMethod?: "BANK" | "CASH";
+  collectedBy?: string;
   notes?: string[];
 };
 

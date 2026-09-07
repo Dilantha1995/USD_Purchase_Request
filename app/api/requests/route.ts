@@ -22,17 +22,22 @@ type Body = {
 function clean(t: any): Transfer[] {
   if (!Array.isArray(t)) return [];
   return t
-    .map((g) => ({
-      recipient: String(g?.recipient ?? "").trim(),
-      account: String(g?.account ?? "").trim(),
-      sourceAccount: String(g?.sourceAccount ?? "").trim(),
-      bankName: String(g?.bankName ?? "").trim() || undefined,
-      amounts: (Array.isArray(g?.amounts) ? g.amounts : [])
-        .map((a: any) => Number(a))
-        .filter((a: number) => Number.isFinite(a) && a > 0),
-      notes: Array.isArray(g?.notes) ? g.notes.map((n: any) => String(n ?? "").trim()) : undefined,
-    }))
-    .filter((g) => g.recipient && g.account && g.amounts.length > 0);
+    .map((g) => {
+      const paymentMethod: "BANK" | "CASH" = g?.paymentMethod === "CASH" ? "CASH" : "BANK";
+      return {
+        recipient: String(g?.recipient ?? "").trim(),
+        account: String(g?.account ?? "").trim(),
+        sourceAccount: String(g?.sourceAccount ?? "").trim(),
+        bankName: String(g?.bankName ?? "").trim() || undefined,
+        paymentMethod,
+        collectedBy: String(g?.collectedBy ?? "").trim() || undefined,
+        amounts: (Array.isArray(g?.amounts) ? g.amounts : [])
+          .map((a: any) => Number(a))
+          .filter((a: number) => Number.isFinite(a) && a > 0),
+        notes: Array.isArray(g?.notes) ? g.notes.map((n: any) => String(n ?? "").trim()) : undefined,
+      };
+    })
+    .filter((g) => g.recipient && g.amounts.length > 0 && (g.paymentMethod === "CASH" ? g.collectedBy : g.account));
 }
 
 export async function POST(req: Request) {
