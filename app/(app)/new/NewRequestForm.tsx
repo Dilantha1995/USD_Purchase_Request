@@ -9,7 +9,7 @@ type SupplierAccount = { name: string; bankName?: string; accountNo?: string };
 type Supplier = { id: string; name: string; accounts?: SupplierAccount[] | null };
 type BankAccount = { id: string; label: string; companyId?: string | null };
 type TransferDraft = { sourceAccount: string; recipient: string; account: string; amounts: string[] };
-type Deal = { id: string; refNo: string; name: string; companyId: string; supplierId: string; rate: number; mvrPending: number; usdPending: number; pending: boolean };
+type Deal = { id: string; refNo: string; name: string; companyId: string; supplierId: string; rate: number; mvrPending: number; usdPending: number; pending: boolean; status?: "OPEN" | "CLOSED" };
 
 type Existing = {
   id: string;
@@ -201,14 +201,17 @@ export default function NewRequestForm({
         <select className="input" value={dealId} onChange={(e) => pickDeal(e.target.value)}>
           <option value="">— Standalone purchase, not part of a deal —</option>
           {dealsForCompany.map((d) => (
-            <option key={d.id} value={d.id}>{d.refNo} — {d.name} (MVR pending {formatAmount(Math.max(d.mvrPending, 0))})</option>
+            <option key={d.id} value={d.id}>
+              {d.refNo} — {d.name} ({d.mvrPending > 0.5 ? `MVR pending ${formatAmount(d.mvrPending)}` : "fully paid"}{d.status === "CLOSED" ? " · Closed" : ""})
+            </option>
           ))}
         </select>
         {selectedDeal && (
           <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
             Deal rate <strong>{selectedDeal.rate}</strong> — MVR pending <strong>{formatAmount(Math.max(selectedDeal.mvrPending, 0))}</strong>
             {" · "}USD {selectedDeal.usdPending < -0.5 ? "received in advance" : "pending"}{" "}
-            <strong>{formatAmount(Math.abs(selectedDeal.usdPending))}</strong>.{" "}
+            <strong>{formatAmount(Math.abs(selectedDeal.usdPending))}</strong>
+            {selectedDeal.status === "CLOSED" ? " · this deal is closed" : ""}.{" "}
             <a href={`/deals/${selectedDeal.id}`} className="underline">View deal</a>
           </p>
         )}

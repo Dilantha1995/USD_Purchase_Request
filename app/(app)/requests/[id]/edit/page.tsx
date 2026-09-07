@@ -23,7 +23,7 @@ export default async function EditRequestPage({ params }: { params: { id: string
     prisma.bankAccount.findMany({ where: { active: true }, select: { id: true, label: true, companyId: true }, orderBy: { label: "asc" } }),
   ]);
   if (!r) notFound();
-  const deals = await getAssignableDeals(r.dealId);
+  const deals = await getAssignableDeals(r.dealId, { onlyPending: false });
 
   const transfers = (r.transfers as unknown as Transfer[]).map((t) => ({
     sourceAccount: t.sourceAccount || r.sourceAccount || "",

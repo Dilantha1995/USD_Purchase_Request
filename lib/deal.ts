@@ -86,18 +86,31 @@ export type SelectableDeal = {
   mvrPending: number;
   usdPending: number;
   pending: boolean;
+  status: "OPEN" | "CLOSED";
 };
 
 /**
- * Deals a purchase-request form may attach to: every deal still owing MVR,
- * plus (so it doesn't disappear from the picker) whichever deal is already
- * linked to the request being edited, even if it's since been settled/closed.
+ * Deals a purchase-request form may attach to.
+ *
+ * By default (onlyPending: true — the "New request" flow), only deals still
+ * owing MVR are offered, plus (so it doesn't disappear from the picker)
+ * whichever deal is already linked to the request being edited, even if
+ * it's since been settled/closed.
+ *
+ * With onlyPending: false (the "Edit request" flow), every deal is offered
+ * regardless of status or settled amount — attaching an already-created
+ * request to a deal after the fact is a bookkeeping correction, not a new
+ * payment, so it shouldn't be limited to deals that still look "pending".
  */
-export async function getAssignableDeals(includeDealId?: string | null): Promise<SelectableDeal[]> {
+export async function getAssignableDeals(
+  includeDealId?: string | null,
+  opts?: { onlyPending?: boolean }
+): Promise<SelectableDeal[]> {
+  const onlyPending = opts?.onlyPending ?? true;
   const include = { requests: { select: { transfers: true } }, usdReceipts: { select: { usdAmount: true } } } as const;
-  const openDeals = await prisma.deal.findMany({ where: { status: "OPEN" }, include });
-  let rows = openDeals;
-  if (includeDealId && !rows.some((d) => d.id === includeDealId)) {
+
+  let rows = await prisma.deal.findMany({ where: onlyPending ? { status: "OPEN" } : undefined, include });
+  if (onlyPending && includeDealId && !rows.some((d) => d.id === includeDealId)) {
     const extra = await prisma.deal.findUnique({ where: { id: includeDealId }, include });
     if (extra) rows = [...rows, extra];
   }
@@ -114,7 +127,8 @@ export async function getAssignableDeals(includeDealId?: string | null): Promise
         mvrPending: totals.mvrPending,
         usdPending: totals.usdPending,
         pending: isDealPaymentPending(totals),
+        status: d.status,
       };
     })
-    .filter((d) => d.pending || d.id === includeDealId);
+    .filter((d) => !onlyPending || d.pending || d.id === includeDealId);
 }
