@@ -18,6 +18,7 @@ export default async function RequestDetail({ params }: { params: { id: string }
     include: {
       company: { select: { id: true, name: true, brandColor: true } },
       createdBy: { select: { name: true, email: true } },
+      deal: { select: { id: true, refNo: true, name: true } },
     },
   });
   if (!r) notFound();
@@ -84,6 +85,14 @@ export default async function RequestDetail({ params }: { params: { id: string }
           {!isTransfer && (
             <Row label="Purchase">
               USD {formatAmount(r.usdAmount)} from {r.source} at {r.rate}
+            </Row>
+          )}
+          {r.deal && (
+            <Row label="Deal">
+              <Link href={`/deals/${r.deal.id}`} className="font-mono text-xs text-ink hover:underline">
+                {r.deal.refNo}
+              </Link>
+              <span className="text-slate-400"> — {r.deal.name}</span>
             </Row>
           )}
           <Row label="Transfer from">{r.sourceAccount}</Row>

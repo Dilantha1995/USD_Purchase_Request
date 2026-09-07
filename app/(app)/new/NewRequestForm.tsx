@@ -9,6 +9,7 @@ type SupplierAccount = { name: string; bankName?: string; accountNo?: string };
 type Supplier = { id: string; name: string; accounts?: SupplierAccount[] | null };
 type BankAccount = { id: string; label: string; companyId?: string | null };
 type TransferDraft = { sourceAccount: string; recipient: string; account: string; amounts: string[] };
+type Deal = { id: string; refNo: string; name: string; companyId: string; supplierId: string; rate: number; mvrPending: number; usdPending: number; pending: boolean };
 
 type Existing = {
   id: string;
@@ -30,24 +31,30 @@ function todayISO() {
 }
 
 export default function NewRequestForm({
-  companies, suppliers, bankAccounts, defaultRequestedBy, existing,
+  companies, suppliers, bankAccounts, deals, defaultDealId, defaultRequestedBy, existing,
 }: {
   companies: Company[];
   suppliers: Supplier[];
   bankAccounts: BankAccount[];
+  deals?: Deal[];
+  defaultDealId?: string;
   defaultRequestedBy: string;
   existing?: Existing;
 }) {
   const router = useRouter();
   const isEdit = !!existing;
+  const allDeals = deals || [];
+  const preselectedDeal = !isEdit && defaultDealId ? allDeals.find((d) => d.id === defaultDealId) : undefined;
 
-  const [companyId, setCompanyId] = useState(existing?.companyId ?? companies[0]?.id ?? "");
+  const [companyId, setCompanyId] = useState(existing?.companyId ?? preselectedDeal?.companyId ?? companies[0]?.id ?? "");
   const company = companies.find((c) => c.id === companyId);
 
   const [date, setDate] = useState(existing?.date ?? todayISO());
   const [usdAmount, setUsdAmount] = useState(existing?.usdAmount ?? "");
-  const [rate, setRate] = useState(existing?.rate ?? "");
+  const [rate, setRate] = useState(existing?.rate ?? (preselectedDeal ? String(preselectedDeal.rate) : ""));
+  const [dealId, setDealId] = useState(preselectedDeal?.id ?? "");
   const [supplierId, setSupplierId] = useState(() => {
+    if (preselectedDeal) return preselectedDeal.supplierId;
     if (!existing) return "";
     const m = suppliers.find((s) => s.name === existing.source);
     return m?.id ?? "";
@@ -60,6 +67,25 @@ export default function NewRequestForm({
   );
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+
+  const selectedDeal = allDeals.find((d) => d.id === dealId);
+  const dealsForCompany = allDeals.filter((d) => d.companyId === companyId);
+
+  function pickDeal(id: string) {
+    setDealId(id);
+    const d = allDeals.find((x) => x.id === id);
+    if (d) {
+      setSupplierId(d.supplierId);
+      setRate(String(d.rate));
+    }
+  }
+
+  function changeCompany(id: string) {
+    setCompanyId(id);
+    if (dealId && !allDeals.some((d) => d.id === dealId && d.companyId === id)) {
+      setDealId("");
+    }
+  }
 
   const selectedSupplier = suppliers.find((s) => s.id === supplierId);
   const supplierAccounts = selectedSupplier?.accounts || [];
@@ -111,6 +137,7 @@ export default function NewRequestForm({
       usdAmount: parseFloat(usdAmount),
       rate: parseFloat(rate),
       source: effectiveSource,
+      dealId: dealId || null,
       requestedBy,
       approvedBy,
       transfers: transfers.map((t) => ({
@@ -153,7 +180,7 @@ export default function NewRequestForm({
           {companies.map((c) => {
             const active = c.id === companyId;
             return (
-              <button type="button" key={c.id} onClick={() => setCompanyId(c.id)}
+              <button type="button" key={c.id} onClick={() => changeCompany(c.id)}
                 className={`card flex items-center gap-3 p-4 text-left transition ${active ? "ring-2" : "hover:bg-slate-50"}`}
                 style={active ? { boxShadow: `0 0 0 2px ${c.brandColor}` } : undefined}>
                 <span className="h-3 w-3 rounded-full" style={{ backgroundColor: c.brandColor }} />
@@ -165,20 +192,45 @@ export default function NewRequestForm({
         </div>
       )}
 
+      {/* Deal */}
+      {!isEdit && (
+        <div className="card space-y-3 p-5">
+          <label className="label">Part of a deal? (optional — pays down an existing dollar purchase agreement)</label>
+          <select className="input" value={dealId} onChange={(e) => pickDeal(e.target.value)}>
+            <option value="">— Standalone purchase, not part of a deal —</option>
+            {dealsForCompany.map((d) => (
+              <option key={d.id} value={d.id}>{d.refNo} — {d.name} (MVR pending {formatAmount(Math.max(d.mvrPending, 0))})</option>
+            ))}
+          </select>
+          {selectedDeal && (
+            <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              Deal rate <strong>{selectedDeal.rate}</strong> — MVR pending <strong>{formatAmount(Math.max(selectedDeal.mvrPending, 0))}</strong>
+              {" · "}USD {selectedDeal.usdPending < -0.5 ? "received in advance" : "pending"}{" "}
+              <strong>{formatAmount(Math.abs(selectedDeal.usdPending))}</strong>.{" "}
+              <a href={`/deals/${selectedDeal.id}`} className="underline">View deal</a>
+            </p>
+          )}
+        </div>
+      )}
+
       {/* Purchase details */}
       <div className="card space-y-4 p-5">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div><label className="label">Date</label><input type="date" className="input" value={date} onChange={(e) => setDate(e.target.value)} required /></div>
-          <div><label className="label">USD amount</label><input type="number" step="0.01" min="0" className="input" value={usdAmount} onChange={(e) => setUsdAmount(e.target.value)} placeholder="4000" required /></div>
-          <div><label className="label">Rate</label><input type="number" step="0.0001" min="0" className="input" value={rate} onChange={(e) => setRate(e.target.value)} placeholder="20.40" required /></div>
+          <div><label className="label">USD amount (this payment)</label><input type="number" step="0.01" min="0" className="input" value={usdAmount} onChange={(e) => setUsdAmount(e.target.value)} placeholder="4000" required /></div>
+          <div>
+            <label className="label">Rate</label>
+            <input type="number" step="0.0001" min="0" className="input" value={rate} onChange={(e) => setRate(e.target.value)} placeholder="20.40" required readOnly={!!selectedDeal} />
+            {selectedDeal && <p className="mt-1 text-xs text-slate-400">Locked to the deal&apos;s agreed rate. Change it from the deal page instead.</p>}
+          </div>
         </div>
         <div>
           <label className="label">Supplier (USD seller)</label>
-          <select className="input" value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
+          <select className="input" value={supplierId} onChange={(e) => setSupplierId(e.target.value)} disabled={!!selectedDeal}>
             <option value="">— Type manually —</option>
             {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
-          {!supplierId && (
+          {!supplierId && !selectedDeal && (
             <input className="input mt-2" value={source} onChange={(e) => setSource(e.target.value)} placeholder="Type supplier name, e.g. Island amenities" required />
           )}
         </div>

@@ -16,6 +16,7 @@ type Body = {
   requestedBy: string;
   approvedBy: string;
   transfers: Transfer[];
+  dealId?: string | null;
 };
 
 function clean(t: any): Transfer[] {
@@ -61,10 +62,18 @@ export async function POST(req: Request) {
   if (transfers.length === 0)
     return NextResponse.json({ error: "Add at least one transfer with an amount" }, { status: 400 });
 
+  const dealId = body.dealId?.trim() || null;
+
   try {
     const created = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const company = await tx.company.findUnique({ where: { id: body.companyId } });
       if (!company) throw new Error("Unknown company");
+
+      if (dealId) {
+        const deal = await tx.deal.findUnique({ where: { id: dealId } });
+        if (!deal) throw new Error("Selected deal not found");
+        if (deal.companyId !== company.id) throw new Error("Selected deal belongs to a different company");
+      }
 
       // Serial restarts at 1 each calendar month (based on the document's YYMM).
       // Within the same month it continues from the company's counter, so the
@@ -96,6 +105,7 @@ export async function POST(req: Request) {
           requestedBy: body.requestedBy?.trim() || session.name,
           approvedBy: body.approvedBy?.trim() || "",
           transfers: transfers as any,
+          dealId,
           createdById: session.id,
         },
       });

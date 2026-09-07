@@ -18,45 +18,55 @@ enum RequestStatus {
   PAID
 }
 
+enum DealStatus {
+  OPEN
+  CLOSED
+}
+
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
+  id           String  @id @default(cuid())
+  email        String  @unique
   name         String
   passwordHash String
-  role         Role     @default(USER)
-  active       Boolean  @default(true)
+  role         Role    @default(USER)
+  active       Boolean @default(true)
 
   canEditRequests       Boolean @default(false)
   canDeleteRequests     Boolean @default(false)
   canManageSuppliers    Boolean @default(false)
   canManageBankAccounts Boolean @default(false)
 
-  createdAt    DateTime  @default(now())
-  requests     Request[]
+  createdAt DateTime  @default(now())
+  requests  Request[]
+  deals     Deal[]
 }
 
 model Company {
-  id           String        @id
-  name         String
-  refPrefix    String
-  brandColor   String
-  templatePdf  Bytes
-  nextSerial   Int           @default(1)
-  serialPeriod String?       // YYMM the nextSerial counter currently belongs to; counter resets when the month changes
-  requests     Request[]
-  bankAccounts BankAccount[]
+  id               String        @id
+  name             String
+  refPrefix        String
+  brandColor       String
+  templatePdf      Bytes
+  nextSerial       Int           @default(1)
+  serialPeriod     String? // YYMM the nextSerial counter currently belongs to; counter resets when the month changes
+  nextDealSerial   Int           @default(1)
+  dealSerialPeriod String? // YYMM the nextDealSerial counter currently belongs to
+  requests         Request[]
+  bankAccounts     BankAccount[]
+  deals            Deal[]
 }
 
 model Supplier {
-  id          String    @id @default(cuid())
+  id          String   @id @default(cuid())
   name        String
   bankName    String?
   accountName String?
   accountNo   String?
   notes       String?
-  accounts    Json?     // [{ name, bankName, accountNo }] — the supplier's beneficiary companies/accounts
-  active      Boolean   @default(true)
-  createdAt   DateTime  @default(now())
+  accounts    Json? // [{ name, bankName, accountNo }] — the supplier's beneficiary companies/accounts
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  deals       Deal[]
 }
 
 model BankAccount {
@@ -83,24 +93,24 @@ model Signatory {
 }
 
 model Request {
-  id            String        @id @default(cuid())
-  refNo         String        @unique
+  id            String   @id @default(cuid())
+  refNo         String   @unique
   serial        Int
-  docType       String        @default("DEX") // "DEX" = dollar purchase, "TRF" = internal transfer
-  company       Company       @relation(fields: [companyId], references: [id])
+  docType       String   @default("DEX") // "DEX" = dollar purchase, "TRF" = internal transfer
+  company       Company  @relation(fields: [companyId], references: [id])
   companyId     String
   date          DateTime
   usdAmount     Float
   rate          Float
-  bankRate      Float?        // default bank rate snapshot at creation
-  exchangeLoss  Float?        // (rate - bankRate) * usdAmount, recorded for accounting (not printed)
+  bankRate      Float? // default bank rate snapshot at creation
+  exchangeLoss  Float? // (rate - bankRate) * usdAmount, recorded for accounting (not printed)
   source        String
   sourceAccount String
   requestedBy   String
   approvedBy    String
   transfers     Json
 
-  status        RequestStatus @default(PENDING)
+  status RequestStatus @default(PENDING)
 
   requestedSignatoryId String?
   approvedSignatoryId  String?
@@ -108,15 +118,89 @@ model Request {
   receipts    Json?
   completedAt DateTime?
 
+  deal   Deal?   @relation(fields: [dealId], references: [id])
+  dealId String?
+
   createdBy   User     @relation(fields: [createdById], references: [id])
   createdById String
   createdAt   DateTime @default(now())
 
   @@index([companyId])
   @@index([createdById])
+  @@index([dealId])
 }
 
 model Settings {
   id              String @id @default("default")
   defaultBankRate Float  @default(15.42)
+}
+
+// A dollar-purchase "deal": an agreement with a supplier to buy a total USD
+// amount at an agreed rate, settled over multiple Requests (MVR payments)
+// and multiple USD deliveries (DealUsdReceipt), possibly not 1:1 in time.
+model Deal {
+  id         String   @id @default(cuid())
+  refNo      String   @unique
+  name       String
+  company    Company  @relation(fields: [companyId], references: [id])
+  companyId  String
+  supplier   Supplier @relation(fields: [supplierId], references: [id])
+  supplierId String
+  date       DateTime
+
+  // Original terms as first agreed
+  initialUsdAmount Float
+  initialRate      Float
+
+  // Currently agreed terms — changed via a rate/amount revision (logged in rateChanges)
+  usdAmount Float
+  rate      Float
+
+  status DealStatus @default(OPEN)
+  notes  String?
+
+  requests    Request[]
+  usdReceipts DealUsdReceipt[]
+  rateChanges DealRateChange[]
+
+  createdBy   User      @relation(fields: [createdById], references: [id])
+  createdById String
+  createdAt   DateTime  @default(now())
+  closedAt    DateTime?
+
+  @@index([companyId])
+  @@index([supplierId])
+}
+
+// USD actually delivered by the supplier against a deal. Recorded separately
+// from Requests (MVR payments) because USD can arrive in advance of payment,
+// in a different split, or after the MVR has already been paid.
+model DealUsdReceipt {
+  id         String   @id @default(cuid())
+  deal       Deal     @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  dealId     String
+  date       DateTime
+  usdAmount  Float
+  notes      String?
+  recordedBy String
+  createdAt  DateTime @default(now())
+
+  @@index([dealId])
+}
+
+// Audit log of USD amount / rate revisions on a deal (rate/amount can change
+// mid-way through settlement; every change is recorded here).
+model DealRateChange {
+  id           String   @id @default(cuid())
+  deal         Deal     @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  dealId       String
+  oldUsdAmount Float
+  oldRate      Float
+  newUsdAmount Float
+  newRate      Float
+  reason       String?
+  changedBy    String
+  changedAt    DateTime @default(now())
+
+  @@index([dealId])
 }
