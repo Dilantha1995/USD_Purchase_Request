@@ -8,7 +8,7 @@ type Company = { id: string; name: string; refPrefix: string; brandColor: string
 type SupplierAccount = { name: string; bankName?: string; accountNo?: string };
 type Supplier = { id: string; name: string; accounts?: SupplierAccount[] | null };
 type BankAccount = { id: string; label: string; companyId?: string | null };
-type TransferDraft = { sourceAccount: string; recipient: string; account: string; amounts: string[] };
+type TransferDraft = { sourceAccount: string; recipient: string; bankName: string; account: string; amounts: string[] };
 type Deal = { id: string; refNo: string; name: string; companyId: string; supplierId: string; rate: number; mvrPending: number; usdPending: number; pending: boolean; status?: "OPEN" | "CLOSED" };
 
 type Existing = {
@@ -66,7 +66,7 @@ export default function NewRequestForm({
   const [requestedBy, setRequestedBy] = useState(existing?.requestedBy ?? defaultRequestedBy);
   const [approvedBy, setApprovedBy] = useState(existing?.approvedBy ?? "");
   const [transfers, setTransfers] = useState<TransferDraft[]>(
-    existing?.transfers?.length ? existing.transfers : [{ sourceAccount: "", recipient: "", account: "", amounts: [""] }]
+    existing?.transfers?.length ? existing.transfers : [{ sourceAccount: "", recipient: "", bankName: "", account: "", amounts: [""] }]
   );
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -117,7 +117,7 @@ export default function NewRequestForm({
 
   const setTransfer = (i: number, patch: Partial<TransferDraft>) =>
     setTransfers((ts) => ts.map((t, idx) => (idx === i ? { ...t, ...patch } : t)));
-  const addTransfer = () => setTransfers((ts) => [...ts, { sourceAccount: ts[ts.length - 1]?.sourceAccount || "", recipient: "", account: "", amounts: [""] }]);
+  const addTransfer = () => setTransfers((ts) => [...ts, { sourceAccount: ts[ts.length - 1]?.sourceAccount || "", recipient: "", bankName: "", account: "", amounts: [""] }]);
   const removeTransfer = (i: number) => setTransfers((ts) => (ts.length > 1 ? ts.filter((_, idx) => idx !== i) : ts));
   const setAmount = (ti: number, ai: number, val: string) =>
     setTransfers((ts) => ts.map((t, idx) => (idx === ti ? { ...t, amounts: t.amounts.map((a, j) => (j === ai ? val : a)) } : t)));
@@ -127,7 +127,7 @@ export default function NewRequestForm({
 
   function pickRecipientAccount(ti: number, idx: string) {
     const a = supplierAccounts[Number(idx)];
-    if (a) setTransfer(ti, { recipient: a.name, account: a.accountNo || "" });
+    if (a) setTransfer(ti, { recipient: a.name, bankName: a.bankName || "", account: a.accountNo || "" });
   }
 
   async function submit(e: React.FormEvent) {
@@ -146,6 +146,7 @@ export default function NewRequestForm({
       transfers: transfers.map((t) => ({
         sourceAccount: t.sourceAccount,
         recipient: t.recipient,
+        bankName: t.bankName,
         account: t.account,
         amounts: t.amounts.map((a) => parseFloat(a)).filter((n) => !isNaN(n) && n > 0),
       })),
@@ -273,8 +274,9 @@ export default function NewRequestForm({
                 </select>
               </div>
             )}
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <div><label className="label">Recipient name</label><input className="input" value={t.recipient} onChange={(e) => setTransfer(ti, { recipient: e.target.value })} placeholder="Aishath Zoona" /></div>
+              <div><label className="label">Recipient bank</label><input className="input" value={t.bankName} onChange={(e) => setTransfer(ti, { bankName: e.target.value })} placeholder="BML" /></div>
               <div><label className="label">Account number</label><input className="input" value={t.account} onChange={(e) => setTransfer(ti, { account: e.target.value })} placeholder="7703-215049-101" /></div>
             </div>
             <div>

@@ -3,6 +3,7 @@ export type Transfer = {
   account: string;
   amounts: number[];
   sourceAccount?: string;
+  bankName?: string;
   notes?: string[];
 };
 

@@ -92,7 +92,7 @@ export default async function RequestDetail({ params }: { params: { id: string }
             <div className="space-y-3">
               {transfers.map((t, i) => (
                 <div key={i} className="rounded-lg border border-slate-200 p-3 text-sm">
-                  <div className="font-medium">{t.recipient}</div>
+                  <div className="font-medium">{t.recipient}{t.bankName ? ` (${t.bankName})` : ""}</div>
                   <div className="text-slate-500">A/C No. {t.account}</div>
                   <ul className="mt-1 space-y-0.5">
                     {t.amounts.map((a, j) => (

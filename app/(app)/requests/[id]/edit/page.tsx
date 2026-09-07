@@ -28,6 +28,7 @@ export default async function EditRequestPage({ params }: { params: { id: string
   const transfers = (r.transfers as unknown as Transfer[]).map((t) => ({
     sourceAccount: t.sourceAccount || r.sourceAccount || "",
     recipient: t.recipient,
+    bankName: t.bankName || "",
     account: t.account,
     amounts: t.amounts.map((a) => String(a)),
   }));

@@ -11,6 +11,7 @@ function cleanTransfers(t: any) {
       recipient: String(g?.recipient ?? "").trim(),
       account: String(g?.account ?? "").trim(),
       sourceAccount: String(g?.sourceAccount ?? "").trim(),
+      bankName: String(g?.bankName ?? "").trim() || undefined,
       supplierId: g?.supplierId || null,
       amounts: (Array.isArray(g?.amounts) ? g.amounts : [])
         .map((a: any) => Number(a))

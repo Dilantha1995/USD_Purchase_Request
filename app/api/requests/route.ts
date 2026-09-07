@@ -26,6 +26,7 @@ function clean(t: any): Transfer[] {
       recipient: String(g?.recipient ?? "").trim(),
       account: String(g?.account ?? "").trim(),
       sourceAccount: String(g?.sourceAccount ?? "").trim(),
+      bankName: String(g?.bankName ?? "").trim() || undefined,
       amounts: (Array.isArray(g?.amounts) ? g.amounts : [])
         .map((a: any) => Number(a))
         .filter((a: number) => Number.isFinite(a) && a > 0),

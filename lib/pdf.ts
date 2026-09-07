@@ -57,7 +57,13 @@ export async function generateRequestPdf(templateBytes: Uint8Array, data: Reques
   }
   for (const t of data.transfers) {
     drawSegs(
-      [{ text: "Transfer from " }, { text: t.sourceAccount || data.sourceAccount, bold: true }, { text: ` to ${t.recipient} A/C No. ${t.account}` }],
+      [
+        { text: "Transfer from " },
+        { text: t.sourceAccount || data.sourceAccount, bold: true },
+        { text: ` to ${t.recipient}` },
+        ...(t.bankName ? [{ text: ` ${t.bankName}`, bold: true }] : []),
+        { text: ` A/C No. ${t.account}` },
+      ],
       MARGIN, y, 11
     );
     y -= 24;
