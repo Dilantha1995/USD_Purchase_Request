@@ -28,6 +28,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     refNo: deal.refNo,
     name: deal.name,
     supplierName: deal.supplier.name,
+    rate: deal.rate,
     date: deal.date,
     status: deal.status,
     totals,

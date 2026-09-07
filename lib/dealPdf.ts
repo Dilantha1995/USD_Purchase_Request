@@ -7,6 +7,7 @@ export type DealStatementData = {
   refNo: string;
   name: string;
   supplierName: string;
+  rate: number;
   date: Date | string;
   status: string;
   totals: DealTotals;
@@ -37,6 +38,7 @@ export async function generateDealStatementPdf(data: DealStatementData): Promise
     ["Deal ref", data.refNo],
     ["Deal name", data.name],
     ["Supplier", data.supplierName],
+    ["USD Amount", `USD ${formatAmount(data.totals.agreedUsd)} @ ${data.rate}`],
     ["Date", formatDate(data.date)],
     ["Status", data.status],
   ];
