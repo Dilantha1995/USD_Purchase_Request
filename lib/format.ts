@@ -39,11 +39,11 @@ export function totalMvr(transfers: Transfer[]): number {
   );
 }
 
-/** Builds e.g. Ilmeena_USD50000_20.15_070926 from the supplier name, agreed USD amount, rate and date. */
+/** Builds e.g. Ilmeena_USD50000_@20.15_070926 from the supplier name, agreed USD amount, rate and date. */
 export function buildDealName(supplierName: string, usdAmount: number, rate: number, date: Date): string {
   const supplierSlug = supplierName.trim().replace(/\s+/g, "") || "Supplier";
   const dd = String(date.getUTCDate()).padStart(2, "0");
   const mm = String(date.getUTCMonth() + 1).padStart(2, "0");
   const yy = String(date.getUTCFullYear()).slice(-2);
-  return `${supplierSlug}_USD${Math.round(usdAmount)}_${rate}_${dd}${mm}${yy}`;
+  return `${supplierSlug}_USD${Math.round(usdAmount)}_@${rate}_${dd}${mm}${yy}`;
 }
