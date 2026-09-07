@@ -76,6 +76,26 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     return NextResponse.json(updated);
   }
 
+  // Full edit: supplier, date, notes (USD amount/rate go through the logged revision above)
+  if (b._edit) {
+    const supplierId = String(b.supplierId || "").trim();
+    if (!supplierId) return NextResponse.json({ error: "Choose a supplier" }, { status: 400 });
+    const supplier = await prisma.supplier.findUnique({ where: { id: supplierId } });
+    if (!supplier) return NextResponse.json({ error: "Unknown supplier" }, { status: 400 });
+    const date = b.date ? new Date(b.date) : deal.date;
+
+    const updated = await prisma.deal.update({
+      where: { id: deal.id },
+      data: {
+        supplierId,
+        date,
+        notes: String(b.notes || "").trim() || null,
+      },
+      select: { id: true },
+    });
+    return NextResponse.json(updated);
+  }
+
   if (b.notes !== undefined) {
     const updated = await prisma.deal.update({
       where: { id: deal.id },

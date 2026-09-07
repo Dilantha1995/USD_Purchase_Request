@@ -45,7 +45,10 @@ export default async function DealDetail({ params }: { params: { id: string } })
             {deal.status === "CLOSED" ? "Closed" : "Open"}
           </span>
           {canEdit && (
-            <Link href={`/new?dealId=${deal.id}`} className="btn-primary">New payment for this deal</Link>
+            <>
+              <Link href={`/deals/${deal.id}/edit`} className="btn-ghost">Edit deal</Link>
+              <Link href={`/new?dealId=${deal.id}`} className="btn-primary">New payment for this deal</Link>
+            </>
           )}
         </div>
       </div>
