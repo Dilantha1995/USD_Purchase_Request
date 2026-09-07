@@ -3,7 +3,7 @@ import { getSession } from "@/lib/auth";
 import { formatAmount, formatDate } from "@/lib/format";
 import { computeDealTotals } from "@/lib/deal";
 import * as XLSX from "xlsx";
-import { renderTablePdf, PdfCol } from "@/lib/pdfTable";
+import { renderTablePdf, PdfCol, slugifyTitle } from "@/lib/pdfTable";
 
 export const runtime = "nodejs";
 
@@ -67,8 +67,9 @@ export async function GET(req: Request) {
       };
     });
 
+  const title = `Dollar Purchase Deals — ${company || "All companies"}${status ? ` (${status === "CLOSED" ? "Closed" : "Open"})` : ""}`;
   const rangeLabel = from || to ? `${from || "start"}_to_${to || "today"}` : "all";
-  const fileBase = `dollar-purchase-deals-${company || "all"}-${rangeLabel}`;
+  const fileBase = `${slugifyTitle(title)}-${rangeLabel}`;
 
   if (format === "xlsx") {
     const aoa = [
@@ -121,7 +122,7 @@ export async function GET(req: Request) {
   );
 
   const bytes = await renderTablePdf({
-    title: `Dollar Purchase Deals — ${company || "All companies"}${status ? ` (${status === "CLOSED" ? "Closed" : "Open"})` : ""}`,
+    title,
     subtitle: from || to ? `Period: ${from || "start"} to ${to || "today"}` : undefined,
     cols,
     rows: [

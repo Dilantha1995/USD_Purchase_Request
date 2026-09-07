@@ -52,19 +52,41 @@ export type LedgerEntry = {
   notes?: string;
 };
 
-/** Chronological ledger of MVR payments (debit) and USD receipts (credit) for a deal. */
+function transferTargetLabel(t: Transfer): string {
+  if (t.paymentMethod === "CASH") return `${t.recipient} (Cash — collected by ${t.collectedBy || "—"})`;
+  if (t.bankName) return `${t.recipient} (${t.bankName}${t.account ? ` A/C ${t.account}` : ""})`;
+  if (t.account) return `${t.recipient} (A/C ${t.account})`;
+  return t.recipient;
+}
+
+/**
+ * Chronological ledger of MVR payments (debit) and USD receipts (credit) for
+ * a deal. Every individual transfer amount on a request is its own line —
+ * a single "Dollar Purchase Request" document often bundles several
+ * transactions (to different accounts, or split for bank limits), and each
+ * one is a distinct payment, not just the document's grand total.
+ */
 export function buildDealLedger(
   requests: { id: string; refNo: string; date: Date; transfers: unknown }[],
   usdReceipts: { id: string; date: Date; usdAmount: number; notes?: string | null }[]
 ): LedgerEntry[] {
-  const paymentEntries: LedgerEntry[] = requests.map((r) => ({
-    date: r.date,
-    type: "PAYMENT",
-    refNo: r.refNo,
-    requestId: r.id,
-    description: `Payment — ${r.refNo}`,
-    mvrDebit: totalMvr((r.transfers as unknown as Transfer[]) || []),
-  }));
+  const paymentEntries: LedgerEntry[] = [];
+  for (const r of requests) {
+    const transfers = (r.transfers as unknown as Transfer[]) || [];
+    for (const t of transfers) {
+      const target = transferTargetLabel(t);
+      t.amounts.forEach((amt, i) => {
+        paymentEntries.push({
+          date: r.date,
+          type: "PAYMENT",
+          refNo: r.refNo,
+          requestId: r.id,
+          description: `Payment — ${r.refNo} — ${target}${t.amounts.length > 1 ? ` (${i + 1}/${t.amounts.length})` : ""}`,
+          mvrDebit: Number(amt) || 0,
+        });
+      });
+    }
+  }
   const receiptEntries: LedgerEntry[] = usdReceipts.map((rc) => ({
     date: rc.date,
     type: "RECEIPT",

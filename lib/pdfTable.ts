@@ -1,5 +1,13 @@
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 
+/** Turns a report heading into a matching download filename base (no extension). */
+export function slugifyTitle(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 export type PdfCol = { h: string; w: number; key: string; align?: "l" | "r" };
 export type PdfRow = { cells: Record<string, string>; bold?: boolean; topBorder?: boolean };
 
