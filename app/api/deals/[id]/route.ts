@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession, can } from "@/lib/auth";
 import { computeDealTotals, buildDealLedger } from "@/lib/deal";
+import { buildDealName } from "@/lib/format";
 
 export const runtime = "nodejs";
 
@@ -34,10 +35,14 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     return NextResponse.json({ error: "You don't have access to change deals" }, { status: 403 });
 
   const b = await req.json().catch(() => ({}));
-  const deal = await prisma.deal.findUnique({ where: { id: params.id } });
+  const deal = await prisma.deal.findUnique({
+    where: { id: params.id },
+    include: { supplier: { select: { name: true } } },
+  });
   if (!deal) return NextResponse.json({ error: "Deal not found" }, { status: 404 });
 
-  // Revise the agreed USD amount / rate — logs the change.
+  // Revise the agreed USD amount / rate — logs the change, and regenerates
+  // the deal name (Supplier_USDx_@rate_date) so it doesn't go stale.
   if (b.newUsdAmount != null || b.newRate != null) {
     const newUsdAmount = Number(b.newUsdAmount ?? deal.usdAmount);
     const newRate = Number(b.newRate ?? deal.rate);
@@ -45,6 +50,8 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       return NextResponse.json({ error: "Enter a valid USD amount" }, { status: 400 });
     if (!Number.isFinite(newRate) || newRate <= 0)
       return NextResponse.json({ error: "Enter a valid rate" }, { status: 400 });
+
+    const newName = buildDealName(deal.supplier.name, newUsdAmount, newRate, deal.date);
 
     const updated = await prisma.$transaction(async (tx) => {
       await tx.dealRateChange.create({
@@ -60,10 +67,10 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       });
       return tx.deal.update({
         where: { id: deal.id },
-        data: { usdAmount: newUsdAmount, rate: newRate },
+        data: { usdAmount: newUsdAmount, rate: newRate, name: newName },
       });
     });
-    return NextResponse.json({ id: updated.id, usdAmount: updated.usdAmount, rate: updated.rate });
+    return NextResponse.json({ id: updated.id, usdAmount: updated.usdAmount, rate: updated.rate, name: updated.name });
   }
 
   // Close / reopen the deal
@@ -83,12 +90,15 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     const supplier = await prisma.supplier.findUnique({ where: { id: supplierId } });
     if (!supplier) return NextResponse.json({ error: "Unknown supplier" }, { status: 400 });
     const date = b.date ? new Date(b.date) : deal.date;
+    // Supplier/date are part of the deal name — regenerate it so it stays accurate.
+    const name = buildDealName(supplier.name, deal.usdAmount, deal.rate, date);
 
     const updated = await prisma.deal.update({
       where: { id: deal.id },
       data: {
         supplierId,
         date,
+        name,
         notes: String(b.notes || "").trim() || null,
       },
       select: { id: true },
