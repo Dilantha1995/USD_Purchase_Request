@@ -1,4 +1,5 @@
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import * as XLSX from "xlsx";
 
 /** Turns a report heading into a matching download filename base (no extension). */
 export function slugifyTitle(title: string): string {
@@ -6,6 +7,32 @@ export function slugifyTitle(title: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
+}
+
+/**
+ * Builds a worksheet with the same title/subtitle heading shown atop the PDF
+ * version of a report, merged across the table width, so the Excel export
+ * isn't just a bare table with no indication of what it is.
+ */
+export function buildReportSheet(opts: {
+  title: string;
+  subtitle?: string;
+  headers: string[];
+  rows: (string | number)[][];
+  colWidths: number[];
+}): XLSX.WorkSheet {
+  const aoa: (string | number)[][] = [[opts.title]];
+  if (opts.subtitle) aoa.push([opts.subtitle]);
+  aoa.push([]);
+  aoa.push(opts.headers);
+  aoa.push(...opts.rows);
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws["!cols"] = opts.colWidths.map((wch) => ({ wch }));
+  const lastCol = opts.headers.length - 1;
+  ws["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: lastCol } }];
+  if (opts.subtitle) ws["!merges"].push({ s: { r: 1, c: 0 }, e: { r: 1, c: lastCol } });
+  return ws;
 }
 
 export type PdfCol = { h: string; w: number; key: string; align?: "l" | "r" };

@@ -3,7 +3,7 @@ import { getSession } from "@/lib/auth";
 import { formatAmount, formatDate } from "@/lib/format";
 import { computeDealTotals } from "@/lib/deal";
 import * as XLSX from "xlsx";
-import { renderTablePdf, PdfCol, slugifyTitle } from "@/lib/pdfTable";
+import { renderTablePdf, PdfCol, slugifyTitle, buildReportSheet } from "@/lib/pdfTable";
 
 export const runtime = "nodejs";
 
@@ -68,22 +68,21 @@ export async function GET(req: Request) {
     });
 
   const title = `Dollar Purchase Deals — ${company || "All companies"}${status ? ` (${status === "CLOSED" ? "Closed" : "Open"})` : ""}`;
+  const subtitle = from || to ? `Period: ${from || "start"} to ${to || "today"}` : undefined;
   const rangeLabel = from || to ? `${from || "start"}_to_${to || "today"}` : "all";
   const fileBase = `${slugifyTitle(title)}-${rangeLabel}`;
 
   if (format === "xlsx") {
-    const aoa = [
-      HEADERS,
-      ...list.map((r: (typeof list)[number]) => [
+    const ws = buildReportSheet({
+      title,
+      subtitle,
+      headers: HEADERS,
+      rows: list.map((r: (typeof list)[number]) => [
         r.refNo, r.dealName, r.company, r.supplier, r.date, r.agreedUsd, r.rate,
         r.agreedMvr, r.mvrPaid, r.mvrPending, r.usdReceived, r.usdPending, r.status,
       ]),
-    ];
-    const ws = XLSX.utils.aoa_to_sheet(aoa);
-    ws["!cols"] = [
-      { wch: 18 }, { wch: 34 }, { wch: 9 }, { wch: 20 }, { wch: 12 }, { wch: 12 }, { wch: 8 },
-      { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 9 },
-    ];
+      colWidths: [18, 34, 9, 20, 12, 12, 8, 14, 14, 14, 14, 14, 9],
+    });
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Deals");
     const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer;
@@ -96,35 +95,42 @@ export async function GET(req: Request) {
     });
   }
 
+  // Matches the Excel export's columns exactly, on a wider-than-A4 page so
+  // nothing needs to be dropped or truncated to fit.
   const cols: PdfCol[] = [
-    { h: "Ref No", w: 88, key: "refNo", align: "l" },
+    { h: "Ref No", w: 85, key: "refNo", align: "l" },
     { h: "Deal Name", w: 150, key: "dealName", align: "l" },
-    { h: "Co.", w: 32, key: "company", align: "l" },
+    { h: "Co.", w: 34, key: "company", align: "l" },
     { h: "Supplier", w: 90, key: "supplier", align: "l" },
+    { h: "Date", w: 58, key: "date", align: "l" },
     { h: "Agreed USD", w: 68, key: "agreedUsd", align: "r" },
     { h: "Rate", w: 40, key: "rate", align: "r" },
-    { h: "MVR Paid", w: 76, key: "mvrPaid", align: "r" },
-    { h: "MVR Pending", w: 80, key: "mvrPending", align: "r" },
-    { h: "USD Received", w: 80, key: "usdReceived", align: "r" },
-    { h: "USD Pending", w: 78, key: "usdPending", align: "r" },
+    { h: "Agreed MVR", w: 74, key: "agreedMvr", align: "r" },
+    { h: "MVR Paid", w: 74, key: "mvrPaid", align: "r" },
+    { h: "MVR Pending", w: 78, key: "mvrPending", align: "r" },
+    { h: "USD Received", w: 78, key: "usdReceived", align: "r" },
+    { h: "USD Pending", w: 76, key: "usdPending", align: "r" },
     { h: "Status", w: 56, key: "status", align: "l" },
   ];
+  const PDF_WIDTH = 1000;
 
   const totals = list.reduce(
     (acc: any, r: (typeof list)[number]) => ({
       agreedUsd: acc.agreedUsd + r.agreedUsd,
+      agreedMvr: acc.agreedMvr + r.agreedMvr,
       mvrPaid: acc.mvrPaid + r.mvrPaid,
       mvrPending: acc.mvrPending + r.mvrPending,
       usdReceived: acc.usdReceived + r.usdReceived,
       usdPending: acc.usdPending + r.usdPending,
     }),
-    { agreedUsd: 0, mvrPaid: 0, mvrPending: 0, usdReceived: 0, usdPending: 0 }
+    { agreedUsd: 0, agreedMvr: 0, mvrPaid: 0, mvrPending: 0, usdReceived: 0, usdPending: 0 }
   );
 
   const bytes = await renderTablePdf({
     title,
-    subtitle: from || to ? `Period: ${from || "start"} to ${to || "today"}` : undefined,
+    subtitle,
     cols,
+    pageWidth: PDF_WIDTH,
     rows: [
       ...list.map((r: (typeof list)[number]) => ({
         cells: {
@@ -132,8 +138,10 @@ export async function GET(req: Request) {
           dealName: r.dealName,
           company: r.company,
           supplier: r.supplier,
+          date: r.date,
           agreedUsd: formatAmount(r.agreedUsd),
           rate: String(r.rate),
+          agreedMvr: formatAmount(r.agreedMvr),
           mvrPaid: formatAmount(r.mvrPaid),
           mvrPending: formatAmount(r.mvrPending),
           usdReceived: formatAmount(r.usdReceived),
@@ -147,6 +155,7 @@ export async function GET(req: Request) {
         cells: {
           refNo: `Total (${list.length} deal${list.length === 1 ? "" : "s"})`,
           agreedUsd: formatAmount(totals.agreedUsd),
+          agreedMvr: formatAmount(totals.agreedMvr),
           mvrPaid: formatAmount(totals.mvrPaid),
           mvrPending: formatAmount(totals.mvrPending),
           usdReceived: formatAmount(totals.usdReceived),

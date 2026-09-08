@@ -3,7 +3,7 @@ import { getSession } from "@/lib/auth";
 import { formatAmount, formatDate } from "@/lib/format";
 import { buildDealLedger, computeDealTotals, LedgerEntry } from "@/lib/deal";
 import * as XLSX from "xlsx";
-import { renderTablePdf, PdfCol, slugifyTitle } from "@/lib/pdfTable";
+import { renderTablePdf, PdfCol, slugifyTitle, buildReportSheet } from "@/lib/pdfTable";
 
 export const runtime = "nodejs";
 
@@ -62,13 +62,14 @@ export async function GET(req: Request) {
   const title = dealId && deriveDealRows[0]
     ? `General Ledger — ${deriveDealRows[0].deal.refNo} · ${deriveDealRows[0].deal.name}`
     : `General Ledger — Dollar Purchase Deals — ${company || "All companies"}${status ? ` (${status === "CLOSED" ? "Closed" : "Open"})` : ""}`;
+  const subtitle = from || to ? `Period: ${from || "start"} to ${to || "today"}` : undefined;
   const rangeLabel = from || to ? `${from || "start"}_to_${to || "today"}` : "all";
   const fileBase = `${slugifyTitle(title)}-${rangeLabel}`;
 
   const grand = { mvrDebit: 0, usdCredit: 0, mvrPending: 0, usdPending: 0 };
 
   if (format === "xlsx") {
-    const aoa: (string | number)[][] = [HEADERS];
+    const aoa: (string | number)[][] = [];
     for (const { deal, entries, mvrPending, usdPending } of deriveDealRows) {
       let subMvr = 0, subUsd = 0;
       for (const e of entries) {
@@ -92,10 +93,13 @@ export async function GET(req: Request) {
     aoa.push(["", "", "", "", "", "Grand total (paid / received)", grand.mvrDebit, grand.usdCredit]);
     aoa.push(["", "", "", "", "", "Grand total pending (to pay / to receive)", grand.mvrPending, grand.usdPending]);
 
-    const ws = XLSX.utils.aoa_to_sheet(aoa);
-    ws["!cols"] = [
-      { wch: 12 }, { wch: 18 }, { wch: 34 }, { wch: 20 }, { wch: 9 }, { wch: 40 }, { wch: 14 }, { wch: 14 },
-    ];
+    const ws = buildReportSheet({
+      title,
+      subtitle,
+      headers: HEADERS,
+      rows: aoa,
+      colWidths: [12, 18, 34, 20, 9, 40, 14, 14],
+    });
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "General Ledger");
     const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer;
@@ -108,20 +112,20 @@ export async function GET(req: Request) {
     });
   }
 
-  // Deal Name is dropped from the printed table (it's on every row of the
-  // group and already visible in the "Subtotal — <ref>" line) so the
-  // Description column has room to show the full transaction detail —
-  // recipient, account, and which split (n/m) of a multi-amount transfer —
-  // instead of truncating it. The Excel export keeps the Deal Name column.
+  // Matches the Excel export's columns exactly, on a page wide enough that
+  // the Description column (recipient, account, and which split n/m of a
+  // multi-amount transfer) still isn't truncated even with Deal Name shown.
   const cols: PdfCol[] = [
-    { h: "Date", w: 52, key: "date", align: "l" },
-    { h: "Deal Ref", w: 86, key: "dealRef", align: "l" },
-    { h: "Supplier", w: 90, key: "supplier", align: "l" },
+    { h: "Date", w: 50, key: "date", align: "l" },
+    { h: "Deal Ref", w: 105, key: "dealRef", align: "l" },
+    { h: "Deal Name", w: 165, key: "dealName", align: "l" },
+    { h: "Supplier", w: 85, key: "supplier", align: "l" },
     { h: "Type", w: 42, key: "type", align: "l" },
-    { h: "Description", w: 340, key: "description", align: "l" },
-    { h: "MVR Debit", w: 76, key: "mvrDebit", align: "r" },
-    { h: "USD Credit", w: 76, key: "usdCredit", align: "r" },
+    { h: "Description", w: 460, key: "description", align: "l" },
+    { h: "MVR Debit", w: 78, key: "mvrDebit", align: "r" },
+    { h: "USD Credit", w: 78, key: "usdCredit", align: "r" },
   ];
+  const PDF_WIDTH = 1150;
 
   const pdfRows: { cells: Record<string, string>; bold?: boolean; topBorder?: boolean }[] = [];
   for (const { deal, entries, mvrPending, usdPending } of deriveDealRows) {
@@ -131,6 +135,7 @@ export async function GET(req: Request) {
         cells: {
           date: formatDate(e.date),
           dealRef: deal.refNo,
+          dealName: deal.name,
           supplier: deal.supplier.name,
           type: e.type === "PAYMENT" ? "Payment" : "Receipt",
           description: e.description,
@@ -168,8 +173,9 @@ export async function GET(req: Request) {
 
   const bytes = await renderTablePdf({
     title,
-    subtitle: from || to ? `Period: ${from || "start"} to ${to || "today"}` : undefined,
+    subtitle,
     cols,
+    pageWidth: PDF_WIDTH,
     rows: pdfRows,
   });
 
