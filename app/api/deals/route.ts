@@ -76,12 +76,27 @@ export async function POST(req: Request) {
           // the race a separate read-then-later-update leaves open: concurrent
           // UPDATEs on the same row serialize in Postgres, so two requests can
           // no longer read the same stale counter value and collide on refNo.
+          // The next serial is also floored at (max existing serial for this
+          // company/period + 1), so the assignment self-heals if the counter
+          // ever drifts behind the actual data instead of repeating the same
+          // collision on every retry.
           const [updatedCompany] = await tx.$queryRaw<{ nextDealSerial: number }[]>`
-            UPDATE "Company"
-            SET "nextDealSerial" = CASE WHEN "dealSerialPeriod" = ${period} THEN "nextDealSerial" + 1 ELSE 2 END,
+            UPDATE "Company" c
+            SET "nextDealSerial" = GREATEST(
+                  CASE WHEN c."dealSerialPeriod" = ${period} THEN c."nextDealSerial" ELSE 1 END,
+                  (
+                    SELECT COALESCE(MAX(CAST(split_part(d."refNo", '/', 4) AS INTEGER)), 0) + 1
+                    FROM "Deal" d
+                    WHERE d."companyId" = c.id
+                      AND split_part(d."refNo", '/', 1) = c."refPrefix"
+                      AND split_part(d."refNo", '/', 2) = 'DEAL'
+                      AND split_part(d."refNo", '/', 3) = ${period}
+                      AND split_part(d."refNo", '/', 4) ~ '^[0-9]+$'
+                  )
+                ) + 1,
                 "dealSerialPeriod" = ${period}
-            WHERE id = ${company.id}
-            RETURNING "nextDealSerial"
+            WHERE c.id = ${company.id}
+            RETURNING c."nextDealSerial"
           `;
           const serial = updatedCompany.nextDealSerial - 1;
 

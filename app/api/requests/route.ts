@@ -95,12 +95,27 @@ export async function POST(req: Request) {
           // the race a separate read-then-later-update leaves open: concurrent
           // UPDATEs on the same row serialize in Postgres, so two requests can
           // no longer read the same stale counter value and collide on refNo.
+          // The next serial is also floored at (max existing serial for this
+          // company/period + 1), so the assignment self-heals if the counter
+          // ever drifts behind the actual data instead of repeating the same
+          // collision on every retry. DEX and TRF documents share one counter
+          // per company/period, so the segment itself isn't filtered on here.
           const [updatedCompany] = await tx.$queryRaw<{ nextSerial: number }[]>`
-            UPDATE "Company"
-            SET "nextSerial" = CASE WHEN "serialPeriod" = ${period} THEN "nextSerial" + 1 ELSE 2 END,
+            UPDATE "Company" c
+            SET "nextSerial" = GREATEST(
+                  CASE WHEN c."serialPeriod" = ${period} THEN c."nextSerial" ELSE 1 END,
+                  (
+                    SELECT COALESCE(MAX(CAST(split_part(r."refNo", '/', 4) AS INTEGER)), 0) + 1
+                    FROM "Request" r
+                    WHERE r."companyId" = c.id
+                      AND split_part(r."refNo", '/', 1) = c."refPrefix"
+                      AND split_part(r."refNo", '/', 3) = ${period}
+                      AND split_part(r."refNo", '/', 4) ~ '^[0-9]+$'
+                  )
+                ) + 1,
                 "serialPeriod" = ${period}
-            WHERE id = ${company.id}
-            RETURNING "nextSerial"
+            WHERE c.id = ${company.id}
+            RETURNING c."nextSerial"
           `;
           const serial = updatedCompany.nextSerial - 1;
 
