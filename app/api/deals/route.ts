@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { getSession, can } from "@/lib/auth";
 import { buildRefNo, buildDealName } from "@/lib/format";
 import { computeDealTotals, isDealPaymentPending } from "@/lib/deal";
+import { retryOnConflict } from "@/lib/dbRetry";
 
 export const runtime = "nodejs";
 
@@ -61,40 +62,50 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Enter a valid agreed rate" }, { status: 400 });
 
   try {
-    const created = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-      const company = await tx.company.findUnique({ where: { id: companyId } });
-      if (!company) throw new Error("Unknown company");
-      const supplier = await tx.supplier.findUnique({ where: { id: supplierId } });
-      if (!supplier) throw new Error("Unknown supplier");
+    const created = await retryOnConflict(
+      () =>
+        prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+          const company = await tx.company.findUnique({ where: { id: companyId } });
+          if (!company) throw new Error("Unknown company");
+          const supplier = await tx.supplier.findUnique({ where: { id: supplierId } });
+          if (!supplier) throw new Error("Unknown supplier");
 
-      const period = `${String(date.getUTCFullYear()).slice(-2)}${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
-      const sameMonth = company.dealSerialPeriod === period || company.dealSerialPeriod == null;
-      const serial = sameMonth ? company.nextDealSerial : 1;
+          const period = `${String(date.getUTCFullYear()).slice(-2)}${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
 
-      const refNo = buildRefNo(company.refPrefix, date, serial, "DEAL");
-      const name = buildDealName(supplier.name, usdAmount, rate, date);
+          // Atomic fetch-and-increment via a single UPDATE ... RETURNING closes
+          // the race a separate read-then-later-update leaves open: concurrent
+          // UPDATEs on the same row serialize in Postgres, so two requests can
+          // no longer read the same stale counter value and collide on refNo.
+          const [updatedCompany] = await tx.$queryRaw<{ nextDealSerial: number }[]>`
+            UPDATE "Company"
+            SET "nextDealSerial" = CASE WHEN "dealSerialPeriod" = ${period} THEN "nextDealSerial" + 1 ELSE 2 END,
+                "dealSerialPeriod" = ${period}
+            WHERE id = ${company.id}
+            RETURNING "nextDealSerial"
+          `;
+          const serial = updatedCompany.nextDealSerial - 1;
 
-      const deal = await tx.deal.create({
-        data: {
-          refNo,
-          name,
-          companyId: company.id,
-          supplierId: supplier.id,
-          date,
-          initialUsdAmount: usdAmount,
-          initialRate: rate,
-          usdAmount,
-          rate,
-          notes,
-          createdById: session.id,
-        },
-      });
-      await tx.company.update({
-        where: { id: company.id },
-        data: { nextDealSerial: serial + 1, dealSerialPeriod: period },
-      });
-      return deal;
-    });
+          const refNo = buildRefNo(company.refPrefix, date, serial, "DEAL");
+          const name = buildDealName(supplier.name, usdAmount, rate, date);
+
+          return tx.deal.create({
+            data: {
+              refNo,
+              name,
+              companyId: company.id,
+              supplierId: supplier.id,
+              date,
+              initialUsdAmount: usdAmount,
+              initialRate: rate,
+              usdAmount,
+              rate,
+              notes,
+              createdById: session.id,
+            },
+          });
+        }),
+      "refNo"
+    );
     return NextResponse.json({ id: created.id, refNo: created.refNo, name: created.name });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "Could not create the deal" }, { status: 500 });

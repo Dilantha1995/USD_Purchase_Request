@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { buildRefNo, Transfer } from "@/lib/format";
+import { retryOnConflict } from "@/lib/dbRetry";
 
 export const runtime = "nodejs";
 
@@ -71,56 +72,66 @@ export async function POST(req: Request) {
   const dealId = body.dealId?.trim() || null;
 
   try {
-    const created = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-      const company = await tx.company.findUnique({ where: { id: body.companyId } });
-      if (!company) throw new Error("Unknown company");
+    const created = await retryOnConflict(
+      () =>
+        prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+          const company = await tx.company.findUnique({ where: { id: body.companyId } });
+          if (!company) throw new Error("Unknown company");
 
-      if (dealId) {
-        const deal = await tx.deal.findUnique({ where: { id: dealId } });
-        if (!deal) throw new Error("Selected deal not found");
-        if (deal.companyId !== company.id) throw new Error("Selected deal belongs to a different company");
-      }
+          if (dealId) {
+            const deal = await tx.deal.findUnique({ where: { id: dealId } });
+            if (!deal) throw new Error("Selected deal not found");
+            if (deal.companyId !== company.id) throw new Error("Selected deal belongs to a different company");
+          }
 
-      // Serial restarts at 1 each calendar month (based on the document's YYMM).
-      // Within the same month it continues from the company's counter, so the
-      // admin "starting serial" still controls the current month's first number.
-      const period = `${String(date.getUTCFullYear()).slice(-2)}${String(
-        date.getUTCMonth() + 1
-      ).padStart(2, "0")}`;
-      const sameMonth = company.serialPeriod === period || company.serialPeriod == null;
-      const serial = sameMonth ? company.nextSerial : 1;
+          // Serial restarts at 1 each calendar month (based on the document's YYMM).
+          // Within the same month it continues from the company's counter, so the
+          // admin "starting serial" still controls the current month's first number.
+          const period = `${String(date.getUTCFullYear()).slice(-2)}${String(
+            date.getUTCMonth() + 1
+          ).padStart(2, "0")}`;
 
-      const settings = await tx.settings.findUnique({ where: { id: "default" } });
-      const bankRate = settings?.defaultBankRate ?? 15.42;
-      const exchangeLoss = isTransfer ? null : (rate - bankRate) * usdAmount;
+          // Atomic fetch-and-increment via a single UPDATE ... RETURNING closes
+          // the race a separate read-then-later-update leaves open: concurrent
+          // UPDATEs on the same row serialize in Postgres, so two requests can
+          // no longer read the same stale counter value and collide on refNo.
+          const [updatedCompany] = await tx.$queryRaw<{ nextSerial: number }[]>`
+            UPDATE "Company"
+            SET "nextSerial" = CASE WHEN "serialPeriod" = ${period} THEN "nextSerial" + 1 ELSE 2 END,
+                "serialPeriod" = ${period}
+            WHERE id = ${company.id}
+            RETURNING "nextSerial"
+          `;
+          const serial = updatedCompany.nextSerial - 1;
 
-      const refNo = buildRefNo(company.refPrefix, date, serial, segment);
-      const request = await tx.request.create({
-        data: {
-          refNo,
-          serial,
-          docType: segment,
-          companyId: company.id,
-          date,
-          usdAmount,
-          rate,
-          bankRate: isTransfer ? null : bankRate,
-          exchangeLoss,
-          source: isTransfer ? (body.source?.trim() || "Internal Transfer") : body.source.trim(),
-          sourceAccount: derivedSourceAccount,
-          requestedBy: body.requestedBy?.trim() || session.name,
-          approvedBy: body.approvedBy?.trim() || "",
-          transfers: transfers as any,
-          dealId,
-          createdById: session.id,
-        },
-      });
-      await tx.company.update({
-        where: { id: company.id },
-        data: { nextSerial: serial + 1, serialPeriod: period },
-      });
-      return request;
-    });
+          const settings = await tx.settings.findUnique({ where: { id: "default" } });
+          const bankRate = settings?.defaultBankRate ?? 15.42;
+          const exchangeLoss = isTransfer ? null : (rate - bankRate) * usdAmount;
+
+          const refNo = buildRefNo(company.refPrefix, date, serial, segment);
+          return tx.request.create({
+            data: {
+              refNo,
+              serial,
+              docType: segment,
+              companyId: company.id,
+              date,
+              usdAmount,
+              rate,
+              bankRate: isTransfer ? null : bankRate,
+              exchangeLoss,
+              source: isTransfer ? (body.source?.trim() || "Internal Transfer") : body.source.trim(),
+              sourceAccount: derivedSourceAccount,
+              requestedBy: body.requestedBy?.trim() || session.name,
+              approvedBy: body.approvedBy?.trim() || "",
+              transfers: transfers as any,
+              dealId,
+              createdById: session.id,
+            },
+          });
+        }),
+      "refNo"
+    );
     return NextResponse.json({ id: created.id, refNo: created.refNo });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "Could not save request" }, { status: 500 });
