@@ -83,6 +83,7 @@ export async function GET(req: Request) {
       aoa.push(["", "", "", "", "", `Subtotal — ${deal.refNo}`, subMvr, subUsd]);
       aoa.push(["", "", "", "", "", "Pending MVR to pay", mvrPending, ""]);
       aoa.push(["", "", "", "", "", "Pending USD to receive", "", usdPending]);
+      aoa.push([]); // blank row so deals don't visually run into each other
       grand.mvrDebit += subMvr;
       grand.usdCredit += subUsd;
       grand.mvrPending += mvrPending;
@@ -147,6 +148,7 @@ export async function GET(req: Request) {
     });
     pdfRows.push({ cells: { description: "Pending MVR to pay", mvrDebit: formatAmount(mvrPending) } });
     pdfRows.push({ cells: { description: "Pending USD to receive", usdCredit: formatAmount(usdPending) } });
+    pdfRows.push({ cells: {} }); // blank row so deals don't visually run into each other
     grand.mvrDebit += subMvr;
     grand.usdCredit += subUsd;
     grand.mvrPending += mvrPending;
