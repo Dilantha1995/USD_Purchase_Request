@@ -7,7 +7,7 @@ import { renderTablePdf, PdfCol, slugifyTitle, buildReportSheet } from "@/lib/pd
 
 export const runtime = "nodejs";
 
-const HEADERS = ["Date", "Deal Ref", "Deal Name", "Supplier", "Type", "Description", "MVR Debit", "USD Credit"];
+const HEADERS = ["Date", "Type", "Description", "MVR Debit", "USD Credit"];
 
 export async function GET(req: Request) {
   const session = await getSession();
@@ -72,33 +72,34 @@ export async function GET(req: Request) {
     const aoa: (string | number)[][] = [];
     for (const { deal, entries, mvrPending, usdPending } of deriveDealRows) {
       let subMvr = 0, subUsd = 0;
+      aoa.push([`${deal.refNo} — ${deal.name} — ${deal.supplier.name}`]);
       for (const e of entries) {
         aoa.push([
-          formatDate(e.date), deal.refNo, deal.name, deal.supplier.name,
+          formatDate(e.date),
           e.type === "PAYMENT" ? "Payment" : "Receipt", e.description,
           e.mvrDebit || 0, e.usdCredit || 0,
         ]);
         subMvr += e.mvrDebit || 0;
         subUsd += e.usdCredit || 0;
       }
-      aoa.push(["", "", "", "", "", `Subtotal — ${deal.refNo}`, subMvr, subUsd]);
-      aoa.push(["", "", "", "", "", "Pending MVR to pay", mvrPending, ""]);
-      aoa.push(["", "", "", "", "", "Pending USD to receive", "", usdPending]);
+      aoa.push(["", "", `Subtotal — ${deal.refNo}`, subMvr, subUsd]);
+      aoa.push(["", "", "Pending MVR to pay", mvrPending, ""]);
+      aoa.push(["", "", "Pending USD to receive", "", usdPending]);
       aoa.push([]); // blank row so deals don't visually run into each other
       grand.mvrDebit += subMvr;
       grand.usdCredit += subUsd;
       grand.mvrPending += mvrPending;
       grand.usdPending += usdPending;
     }
-    aoa.push(["", "", "", "", "", "Grand total (paid / received)", grand.mvrDebit, grand.usdCredit]);
-    aoa.push(["", "", "", "", "", "Grand total pending (to pay / to receive)", grand.mvrPending, grand.usdPending]);
+    aoa.push(["", "", "Grand total (paid / received)", grand.mvrDebit, grand.usdCredit]);
+    aoa.push(["", "", "Grand total pending (to pay / to receive)", grand.mvrPending, grand.usdPending]);
 
     const ws = buildReportSheet({
       title,
       subtitle,
       headers: HEADERS,
       rows: aoa,
-      colWidths: [12, 18, 34, 20, 9, 40, 14, 14],
+      colWidths: [12, 9, 70, 14, 14],
     });
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "General Ledger");
@@ -112,31 +113,27 @@ export async function GET(req: Request) {
     });
   }
 
-  // Matches the Excel export's columns exactly, on a page wide enough that
-  // the Description column (recipient, account, and which split n/m of a
-  // multi-amount transfer) still isn't truncated even with Deal Name shown.
+  // Matches the Excel export's columns exactly. Each deal's transactions are
+  // led by a bold heading row (ref no, deal name, supplier) instead of
+  // repeating those on every line, so the Description column has plenty of
+  // room for the full recipient/account/split-n-of-m text with no truncation.
   const cols: PdfCol[] = [
-    { h: "Date", w: 50, key: "date", align: "l" },
-    { h: "Deal Ref", w: 105, key: "dealRef", align: "l" },
-    { h: "Deal Name", w: 165, key: "dealName", align: "l" },
-    { h: "Supplier", w: 85, key: "supplier", align: "l" },
-    { h: "Type", w: 42, key: "type", align: "l" },
-    { h: "Description", w: 460, key: "description", align: "l" },
-    { h: "MVR Debit", w: 78, key: "mvrDebit", align: "r" },
-    { h: "USD Credit", w: 78, key: "usdCredit", align: "r" },
+    { h: "Date", w: 60, key: "date", align: "l" },
+    { h: "Type", w: 55, key: "type", align: "l" },
+    { h: "Description", w: 650, key: "description", align: "l" },
+    { h: "MVR Debit", w: 90, key: "mvrDebit", align: "r" },
+    { h: "USD Credit", w: 90, key: "usdCredit", align: "r" },
   ];
-  const PDF_WIDTH = 1150;
+  const PDF_WIDTH = 1000;
 
   const pdfRows: { cells: Record<string, string>; bold?: boolean; topBorder?: boolean }[] = [];
   for (const { deal, entries, mvrPending, usdPending } of deriveDealRows) {
     let subMvr = 0, subUsd = 0;
+    pdfRows.push({ bold: true, cells: { description: `${deal.refNo} — ${deal.name} — ${deal.supplier.name}` } });
     for (const e of entries) {
       pdfRows.push({
         cells: {
           date: formatDate(e.date),
-          dealRef: deal.refNo,
-          dealName: deal.name,
-          supplier: deal.supplier.name,
           type: e.type === "PAYMENT" ? "Payment" : "Receipt",
           description: e.description,
           mvrDebit: e.mvrDebit ? formatAmount(e.mvrDebit) : "",
