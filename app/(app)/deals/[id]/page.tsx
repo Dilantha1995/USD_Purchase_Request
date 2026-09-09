@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { formatAmount, formatDate } from "@/lib/format";
 import { computeDealTotals, buildDealLedger } from "@/lib/deal";
 import DealActions from "./DealActions";
+import LedgerTable, { LedgerRowVM } from "./LedgerTable";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +30,17 @@ export default async function DealDetail({ params }: { params: { id: string } })
 
   const totals = computeDealTotals(deal, deal.requests, deal.usdReceipts);
   const ledger = buildDealLedger(deal.requests, deal.usdReceipts);
+  const ledgerRows: LedgerRowVM[] = ledger.map((e, i) => ({
+    key: e.receiptId || `${e.requestId}-${i}`,
+    dateLabel: formatDate(e.date),
+    dateISO: e.date.toISOString().slice(0, 10),
+    description: e.description,
+    mvrDebit: e.mvrDebit,
+    usdCredit: e.usdCredit,
+    requestId: e.requestId,
+    receiptId: e.receiptId,
+    notes: e.notes,
+  }));
 
   return (
     <div className="space-y-5">
@@ -106,44 +118,14 @@ export default async function DealDetail({ params }: { params: { id: string } })
             <p className="text-xs text-slate-500">MVR paid (debit) vs. USD received (credit), in order.</p>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
-                <tr>
-                  <th className="px-4 py-2">Date</th>
-                  <th className="px-4 py-2">Description</th>
-                  <th className="px-4 py-2 text-right">MVR Paid (Dr)</th>
-                  <th className="px-4 py-2 text-right">USD Received (Cr)</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {ledger.map((e, i) => (
-                  <tr key={i}>
-                    <td className="px-4 py-2 text-slate-600">{formatDate(e.date)}</td>
-                    <td className="px-4 py-2">
-                      {e.requestId ? (
-                        <Link href={`/requests/${e.requestId}`} className="text-ink hover:underline">{e.description}</Link>
-                      ) : (
-                        e.description
-                      )}
-                    </td>
-                    <td className="px-4 py-2 text-right">{e.mvrDebit ? formatAmount(e.mvrDebit) : ""}</td>
-                    <td className="px-4 py-2 text-right">{e.usdCredit ? formatAmount(e.usdCredit) : ""}</td>
-                  </tr>
-                ))}
-                {ledger.length === 0 && (
-                  <tr><td colSpan={4} className="px-4 py-8 text-center text-slate-500">No transactions recorded yet.</td></tr>
-                )}
-              </tbody>
-              {ledger.length > 0 && (
-                <tfoot className="border-t border-slate-200 bg-slate-50 text-sm font-medium">
-                  <tr>
-                    <td className="px-4 py-2" colSpan={2}>Total</td>
-                    <td className="px-4 py-2 text-right">{formatAmount(totals.mvrPaid)}</td>
-                    <td className="px-4 py-2 text-right">{formatAmount(totals.usdReceived)}</td>
-                  </tr>
-                </tfoot>
-              )}
-            </table>
+            <LedgerTable
+              dealId={deal.id}
+              rows={ledgerRows}
+              totalMvrPaid={totals.mvrPaid}
+              totalUsdReceived={totals.usdReceived}
+              canEdit={canEdit}
+              canDelete={canDelete}
+            />
           </div>
         </div>
       </div>

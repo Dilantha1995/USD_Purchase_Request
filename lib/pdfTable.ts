@@ -36,7 +36,7 @@ export function buildReportSheet(opts: {
 }
 
 export type PdfCol = { h: string; w: number; key: string; align?: "l" | "r" };
-export type PdfRow = { cells: Record<string, string>; bold?: boolean; topBorder?: boolean };
+export type PdfRow = { cells: Record<string, string>; bold?: boolean; topBorder?: boolean; heading?: string };
 
 /** Generic paginated table renderer shared by the report export routes. */
 export async function renderTablePdf(opts: {
@@ -101,6 +101,14 @@ export async function renderTablePdf(opts: {
     }
     if (row.topBorder) {
       page.drawLine({ start: { x: M, y: y + 9 }, end: { x: PW - M, y: y + 9 }, thickness: 0.5, color: grey });
+    }
+    if (row.heading != null) {
+      // A section heading (e.g. a deal's ref/name/supplier) starts flush at
+      // the left margin and spans the full table width, instead of being
+      // pinned to whichever column key it happened to be drawn under.
+      page.drawText(clip(row.heading, PW - M * 2, true), { x: M, y, size: 8, font: bold, color: ink });
+      y -= 14;
+      continue;
     }
     const f = row.bold ? bold : font;
     opts.cols.forEach((c, i) => {

@@ -3,7 +3,7 @@ import { getSession } from "@/lib/auth";
 import { formatAmount, formatDate } from "@/lib/format";
 import { buildDealLedger, computeDealTotals, LedgerEntry } from "@/lib/deal";
 import * as XLSX from "xlsx";
-import { renderTablePdf, PdfCol, slugifyTitle, buildReportSheet } from "@/lib/pdfTable";
+import { renderTablePdf, PdfCol, PdfRow, slugifyTitle, buildReportSheet } from "@/lib/pdfTable";
 
 export const runtime = "nodejs";
 
@@ -126,10 +126,10 @@ export async function GET(req: Request) {
   ];
   const PDF_WIDTH = 1000;
 
-  const pdfRows: { cells: Record<string, string>; bold?: boolean; topBorder?: boolean }[] = [];
+  const pdfRows: PdfRow[] = [];
   for (const { deal, entries, mvrPending, usdPending } of deriveDealRows) {
     let subMvr = 0, subUsd = 0;
-    pdfRows.push({ bold: true, cells: { description: `${deal.refNo} — ${deal.name} — ${deal.supplier.name}` } });
+    pdfRows.push({ cells: {}, heading: `${deal.refNo} — ${deal.name} — ${deal.supplier.name}` });
     for (const e of entries) {
       pdfRows.push({
         cells: {
