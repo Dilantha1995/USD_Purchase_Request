@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { formatAmount, formatDate } from "@/lib/format";
-import { computeDealTotals } from "@/lib/deal";
+import { computeDealTotals, summarizeRequestStatuses } from "@/lib/deal";
 
 export const dynamic = "force-dynamic";
 
@@ -43,7 +43,7 @@ export default async function DealsPage({
     include: {
       company: { select: { id: true, name: true, brandColor: true } },
       supplier: { select: { id: true, name: true } },
-      requests: { select: { transfers: true } },
+      requests: { select: { transfers: true, status: true } },
       usdReceipts: { select: { usdAmount: true } },
     },
     orderBy: { createdAt: "desc" },
@@ -152,6 +152,7 @@ export default async function DealsPage({
               <th className="px-4 py-3 text-right">USD Received</th>
               <th className="px-4 py-3 text-right">USD Pending</th>
               <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3">Requests</th>
               <th className="px-4 py-3"></th>
             </tr>
           </thead>
@@ -178,13 +179,14 @@ export default async function DealsPage({
                     {d.status === "CLOSED" ? "Closed" : "Open"}
                   </span>
                 </td>
+                <td className="px-4 py-3 text-slate-600">{summarizeRequestStatuses(d.requests)}</td>
                 <td className="px-4 py-3 text-right">
                   <Link href={`/deals/${d.id}`} className="text-sm font-medium text-ink hover:underline">View</Link>
                 </td>
               </tr>
             ))}
             {rows.length === 0 && (
-              <tr><td colSpan={12} className="px-4 py-12 text-center text-sm text-slate-500">No deals match. Try clearing the filters, or create one.</td></tr>
+              <tr><td colSpan={13} className="px-4 py-12 text-center text-sm text-slate-500">No deals match. Try clearing the filters, or create one.</td></tr>
             )}
           </tbody>
           {rows.length > 0 && (
@@ -197,7 +199,7 @@ export default async function DealsPage({
                 <td className="px-4 py-3 text-right">{formatAmount(Math.max(grand.agreedMvr - grand.mvrPaid, 0))}</td>
                 <td className="px-4 py-3 text-right">{formatAmount(grand.usdReceived)}</td>
                 <td className="px-4 py-3 text-right">{formatAmount(Math.max(grand.agreedUsd - grand.usdReceived, 0))}</td>
-                <td colSpan={2}></td>
+                <td colSpan={3}></td>
               </tr>
             </tfoot>
           )}

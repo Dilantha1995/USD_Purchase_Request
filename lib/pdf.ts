@@ -168,14 +168,6 @@ export async function generateRequestPdf(templateBytes: Uint8Array, data: Reques
     const sigLabelY = Math.min(opts.boxBottom + opts.sigCeiling, y - opts.contentToSigGap);
     const rightX = 330;
 
-    // A clear divider between the transfer details above and the signature block below.
-    page.drawLine({
-      start: { x: MARGIN, y: sigLabelY + 65 },
-      end: { x: width - MARGIN, y: sigLabelY + 65 },
-      thickness: 0.75,
-      color: COLOR_LINE,
-    });
-
     await placeSig(data.requestedSignature, MARGIN, sigLabelY);
     await placeSig(data.approvedSignature, rightX, sigLabelY);
 
@@ -185,8 +177,16 @@ export async function generateRequestPdf(templateBytes: Uint8Array, data: Reques
     page.drawText(data.approvedBy, { x: rightX, y: sigLabelY - 20, size: opts.base.font, font, color: COLOR_INK });
 
     if (data.status === "PAID") {
+      // Guaranteed clear of the signature block below it (which the fixed
+      // proportional placement alone wasn't, on short-content documents) —
+      // the margin scales with this copy's own box height so it also clears
+      // the (much closer) content above it in the compact cash layout.
+      const paidY = Math.max(
+        sigLabelY + (opts.titleY - opts.boxBottom) * 0.1,
+        opts.boxBottom + Math.min(120, (opts.titleY - opts.boxBottom) * 0.35)
+      );
       page.drawText("PAID", {
-        x: MARGIN + 155, y: opts.boxBottom + Math.min(120, (opts.titleY - opts.boxBottom) * 0.35), size: opts.base.font * 4.9,
+        x: MARGIN + 155, y: paidY, size: opts.base.font * 4.9,
         font: bold, color: rgb(0.82, 0.12, 0.12), rotate: degrees(12), opacity: 0.85,
       });
     }

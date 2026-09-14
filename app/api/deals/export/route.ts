@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { formatAmount, formatDate } from "@/lib/format";
-import { computeDealTotals } from "@/lib/deal";
+import { computeDealTotals, summarizeRequestStatuses } from "@/lib/deal";
 import * as XLSX from "xlsx";
 import { renderTablePdf, PdfCol, slugifyTitle, buildReportSheet } from "@/lib/pdfTable";
 
@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 
 const HEADERS = [
   "Ref No", "Deal Name", "Company", "Supplier", "Date", "Agreed USD", "Rate",
-  "Agreed MVR", "MVR Paid", "MVR Pending", "USD Received", "USD Pending", "Status",
+  "Agreed MVR", "MVR Paid", "MVR Pending", "USD Received", "USD Pending", "Status", "Requests",
 ];
 
 export async function GET(req: Request) {
@@ -38,7 +38,7 @@ export async function GET(req: Request) {
     include: {
       company: { select: { id: true, name: true } },
       supplier: { select: { name: true } },
-      requests: { select: { transfers: true } },
+      requests: { select: { transfers: true, status: true } },
       usdReceipts: { select: { usdAmount: true } },
     },
     orderBy: { date: "asc" },
@@ -64,6 +64,7 @@ export async function GET(req: Request) {
         usdReceived: t.usdReceived,
         usdPending: Math.max(t.usdPending, 0),
         status: d.status === "CLOSED" ? "Closed" : "Open",
+        requestsSummary: summarizeRequestStatuses(d.requests),
       };
     });
 
@@ -79,9 +80,9 @@ export async function GET(req: Request) {
       headers: HEADERS,
       rows: list.map((r: (typeof list)[number]) => [
         r.refNo, r.dealName, r.company, r.supplier, r.date, r.agreedUsd, r.rate,
-        r.agreedMvr, r.mvrPaid, r.mvrPending, r.usdReceived, r.usdPending, r.status,
+        r.agreedMvr, r.mvrPaid, r.mvrPending, r.usdReceived, r.usdPending, r.status, r.requestsSummary,
       ]),
-      colWidths: [18, 34, 9, 20, 12, 12, 8, 14, 14, 14, 14, 14, 9],
+      colWidths: [18, 34, 9, 20, 12, 12, 8, 14, 14, 14, 14, 14, 9, 18],
     });
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Deals");
@@ -111,8 +112,9 @@ export async function GET(req: Request) {
     { h: "USD Received", w: 78, key: "usdReceived", align: "r" },
     { h: "USD Pending", w: 76, key: "usdPending", align: "r" },
     { h: "Status", w: 56, key: "status", align: "l" },
+    { h: "Requests", w: 90, key: "requestsSummary", align: "l" },
   ];
-  const PDF_WIDTH = 1000;
+  const PDF_WIDTH = 1130;
 
   const totals = list.reduce(
     (acc: any, r: (typeof list)[number]) => ({
@@ -147,6 +149,7 @@ export async function GET(req: Request) {
           usdReceived: formatAmount(r.usdReceived),
           usdPending: formatAmount(r.usdPending),
           status: r.status,
+          requestsSummary: r.requestsSummary,
         },
       })),
       {

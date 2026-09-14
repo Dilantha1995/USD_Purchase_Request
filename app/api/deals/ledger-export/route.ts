@@ -7,7 +7,7 @@ import { renderTablePdf, PdfCol, PdfRow, slugifyTitle, buildReportSheet } from "
 
 export const runtime = "nodejs";
 
-const HEADERS = ["Date", "Type", "Description", "MVR Debit", "USD Credit"];
+const HEADERS = ["Date", "Type", "Status", "Description", "MVR Debit", "USD Credit"];
 
 export async function GET(req: Request) {
   const session = await getSession();
@@ -76,30 +76,32 @@ export async function GET(req: Request) {
       for (const e of entries) {
         aoa.push([
           formatDate(e.date),
-          e.type === "PAYMENT" ? "Payment" : "Receipt", e.description,
+          e.type === "PAYMENT" ? "Payment" : "Receipt",
+          e.type === "PAYMENT" ? (e.requestStatus === "PAID" ? "Paid" : "Pending") : "",
+          e.description,
           e.mvrDebit || 0, e.usdCredit || 0,
         ]);
         subMvr += e.mvrDebit || 0;
         subUsd += e.usdCredit || 0;
       }
-      aoa.push(["", "", `Subtotal — ${deal.refNo}`, subMvr, subUsd]);
-      aoa.push(["", "", "Pending MVR to pay", mvrPending, ""]);
-      aoa.push(["", "", "Pending USD to receive", "", usdPending]);
+      aoa.push(["", "", "", `Subtotal — ${deal.refNo}`, subMvr, subUsd]);
+      aoa.push(["", "", "", "Pending MVR to pay", mvrPending, ""]);
+      aoa.push(["", "", "", "Pending USD to receive", "", usdPending]);
       aoa.push([]); // blank row so deals don't visually run into each other
       grand.mvrDebit += subMvr;
       grand.usdCredit += subUsd;
       grand.mvrPending += mvrPending;
       grand.usdPending += usdPending;
     }
-    aoa.push(["", "", "Grand total (paid / received)", grand.mvrDebit, grand.usdCredit]);
-    aoa.push(["", "", "Grand total pending (to pay / to receive)", grand.mvrPending, grand.usdPending]);
+    aoa.push(["", "", "", "Grand total (paid / received)", grand.mvrDebit, grand.usdCredit]);
+    aoa.push(["", "", "", "Grand total pending (to pay / to receive)", grand.mvrPending, grand.usdPending]);
 
     const ws = buildReportSheet({
       title,
       subtitle,
       headers: HEADERS,
       rows: aoa,
-      colWidths: [12, 9, 70, 14, 14],
+      colWidths: [12, 9, 9, 66, 14, 14],
     });
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "General Ledger");
@@ -120,7 +122,8 @@ export async function GET(req: Request) {
   const cols: PdfCol[] = [
     { h: "Date", w: 60, key: "date", align: "l" },
     { h: "Type", w: 55, key: "type", align: "l" },
-    { h: "Description", w: 650, key: "description", align: "l" },
+    { h: "Status", w: 55, key: "reqStatus", align: "l" },
+    { h: "Description", w: 590, key: "description", align: "l" },
     { h: "MVR Debit", w: 90, key: "mvrDebit", align: "r" },
     { h: "USD Credit", w: 90, key: "usdCredit", align: "r" },
   ];
@@ -135,6 +138,7 @@ export async function GET(req: Request) {
         cells: {
           date: formatDate(e.date),
           type: e.type === "PAYMENT" ? "Payment" : "Receipt",
+          reqStatus: e.type === "PAYMENT" ? (e.requestStatus === "PAID" ? "Paid" : "Pending") : "",
           description: e.description,
           mvrDebit: e.mvrDebit ? formatAmount(e.mvrDebit) : "",
           usdCredit: e.usdCredit ? formatAmount(e.usdCredit) : "",

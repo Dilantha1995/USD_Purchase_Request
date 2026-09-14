@@ -40,11 +40,22 @@ export function isDealPaymentPending(totals: DealTotals): boolean {
   return totals.mvrPending > EPS;
 }
 
+/** e.g. "2 Paid, 1 Pending" — how the linked purchase requests are settling, not the deal's own Open/Closed status. */
+export function summarizeRequestStatuses(requests: { status: "PENDING" | "PAID" }[]): string {
+  if (requests.length === 0) return "—";
+  const paid = requests.filter((r) => r.status === "PAID").length;
+  const pending = requests.length - paid;
+  if (pending === 0) return `${paid} Paid`;
+  if (paid === 0) return `${pending} Pending`;
+  return `${paid} Paid, ${pending} Pending`;
+}
+
 export type LedgerEntry = {
   date: Date;
   type: "PAYMENT" | "RECEIPT";
   refNo?: string;
   requestId?: string;
+  requestStatus?: "PENDING" | "PAID"; // the underlying request's own payment status (PAYMENT rows only)
   receiptId?: string;
   description: string;
   mvrDebit?: number; // MVR paid out to buy USD
@@ -67,7 +78,7 @@ function transferTargetLabel(t: Transfer): string {
  * one is a distinct payment, not just the document's grand total.
  */
 export function buildDealLedger(
-  requests: { id: string; refNo: string; date: Date; transfers: unknown }[],
+  requests: { id: string; refNo: string; date: Date; transfers: unknown; status: "PENDING" | "PAID" }[],
   usdReceipts: { id: string; date: Date; usdAmount: number; notes?: string | null }[]
 ): LedgerEntry[] {
   const paymentEntries: LedgerEntry[] = [];
@@ -81,6 +92,7 @@ export function buildDealLedger(
           type: "PAYMENT",
           refNo: r.refNo,
           requestId: r.id,
+          requestStatus: r.status,
           description: `Payment — ${r.refNo} — ${target}${t.amounts.length > 1 ? ` (${i + 1}/${t.amounts.length})` : ""}`,
           mvrDebit: Number(amt) || 0,
         });
