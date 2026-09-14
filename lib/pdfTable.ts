@@ -36,7 +36,14 @@ export function buildReportSheet(opts: {
 }
 
 export type PdfCol = { h: string; w: number; key: string; align?: "l" | "r" };
-export type PdfRow = { cells: Record<string, string>; bold?: boolean; topBorder?: boolean; heading?: string };
+export type PdfRow = {
+  cells: Record<string, string>;
+  bold?: boolean;
+  topBorder?: boolean;
+  heading?: string;
+  /** Background highlight for the row (e.g. green/yellow grand-total rows), as an [r,g,b] triple in 0-1. */
+  fill?: [number, number, number];
+};
 
 /** Generic paginated table renderer shared by the report export routes. */
 export async function renderTablePdf(opts: {
@@ -98,6 +105,12 @@ export async function renderTablePdf(opts: {
       page = pdf.addPage([PW, PH]);
       y = PH - 40;
       drawHeader();
+    }
+    if (row.fill) {
+      page.drawRectangle({
+        x: M, y: y - 4, width: PW - M * 2, height: 13,
+        color: rgb(row.fill[0], row.fill[1], row.fill[2]),
+      });
     }
     if (row.topBorder) {
       page.drawLine({ start: { x: M, y: y + 9 }, end: { x: PW - M, y: y + 9 }, thickness: 0.5, color: grey });
