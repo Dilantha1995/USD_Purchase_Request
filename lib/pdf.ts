@@ -43,9 +43,9 @@ const COMPACT_MIN_SCALE = 0.55;
 // scale — same trick the normal layout relies on (190 - 40 = 150) — instead
 // of drifting close enough to the box's bottom edge to collide with the
 // second copy's logo below it.
-const COMPACT_MIN_Y_BEFORE_SIGNATURE = 160;
+const COMPACT_MIN_Y_BEFORE_SIGNATURE = 180;
 const COMPACT_CONTENT_TO_SIG_GAP = 90;
-const COMPACT_SIG_CEILING = 70;
+const COMPACT_SIG_CEILING = 90;
 const COMPACT_HEADER_OFFSET = 120; // box top -> title baseline, clears the (real or stamped) logo above it
 
 function neededBodyHeight(isTransfer: boolean, transfers: Transfer[], base: typeof BASE) {
@@ -175,6 +175,16 @@ export async function generateRequestPdf(templateBytes: Uint8Array, data: Reques
     page.drawText("Processed and Approved By", { x: rightX, y: sigLabelY, size: opts.base.font, font: bold, color: COLOR_INK });
     page.drawText(data.requestedBy, { x: MARGIN, y: sigLabelY - 20, size: opts.base.font, font, color: COLOR_INK });
     page.drawText(data.approvedBy, { x: rightX, y: sigLabelY - 20, size: opts.base.font, font, color: COLOR_INK });
+
+    // Cash is handed over in person, so whoever collected it gets their own
+    // labeled line too — not just the inline mention on the transfer line.
+    const cashCollectors = Array.from(
+      new Set(data.transfers.filter((t) => t.paymentMethod === "CASH" && t.collectedBy).map((t) => t.collectedBy as string))
+    );
+    if (cashCollectors.length > 0) {
+      page.drawText("Collected By", { x: MARGIN, y: sigLabelY - 40, size: opts.base.font, font: bold, color: COLOR_INK });
+      page.drawText(cashCollectors.join(", "), { x: MARGIN, y: sigLabelY - 60, size: opts.base.font, font, color: COLOR_INK });
+    }
 
     if (data.status === "PAID") {
       // Guaranteed clear of the signature block below it (which the fixed
