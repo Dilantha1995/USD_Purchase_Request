@@ -112,6 +112,11 @@ model Request {
 
   status RequestStatus @default(PENDING)
 
+  // Whether the document prints a second identical copy (below a cut line)
+  // for handing to whoever collects payment — independent of payment method,
+  // set explicitly per request instead of being implied by Cash vs Bank.
+  printReceipt Boolean @default(false)
+
   requestedSignatoryId String?
   approvedSignatoryId  String?
 

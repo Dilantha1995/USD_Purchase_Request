@@ -79,6 +79,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
         requestedSignatoryId: b.requestedSignatoryId || null,
         approvedSignatoryId: b.approvedSignatoryId || null,
         transfers: transfers as any,
+        printReceipt: Boolean(b.printReceipt),
       },
       select: { id: true },
     });

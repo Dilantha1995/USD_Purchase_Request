@@ -113,6 +113,7 @@ export default async function RequestDetail({ params }: { params: { id: string }
           <Row label="Total MVR">
             <strong>{formatAmount(totalMvr(transfers))}</strong>
           </Row>
+          <Row label="Receipt copy">{r.printReceipt ? "Included" : "Not included"}</Row>
           <Row label="Requested by">{r.requestedBy}</Row>
           <Row label="Approved by">{r.approvedBy || "\u2014"}</Row>
           <Row label="Created by">

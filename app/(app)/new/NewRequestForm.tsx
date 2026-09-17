@@ -25,6 +25,7 @@ type Existing = {
   requestedBy: string;
   approvedBy: string;
   transfers: TransferDraft[];
+  printReceipt?: boolean;
 };
 
 function todayISO() {
@@ -70,6 +71,7 @@ export default function NewRequestForm({
   const [transfers, setTransfers] = useState<TransferDraft[]>(
     existing?.transfers?.length ? existing.transfers : [{ sourceAccount: "", recipient: "", bankName: "", account: "", paymentMethod: "BANK", collectedBy: "", amounts: [""] }]
   );
+  const [printReceipt, setPrintReceipt] = useState(existing?.printReceipt ?? false);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -145,6 +147,7 @@ export default function NewRequestForm({
       dealId: dealId || null,
       requestedBy,
       approvedBy,
+      printReceipt,
       transfers: transfers.map((t) => ({
         sourceAccount: t.sourceAccount,
         recipient: t.recipient,
@@ -326,6 +329,24 @@ export default function NewRequestForm({
           </div>
         ))}
         <button type="button" onClick={addTransfer} className="btn-ghost">+ Add transfer to another account</button>
+      </div>
+
+      {/* Receipt copy */}
+      <div className="card p-5">
+        <label className="flex items-start gap-2.5">
+          <input
+            type="checkbox"
+            className="mt-0.5"
+            checked={printReceipt}
+            onChange={(e) => setPrintReceipt(e.target.checked)}
+          />
+          <span>
+            <span className="block text-sm font-medium text-ink">Include a receipt copy</span>
+            <span className="block text-xs text-slate-500">
+              Prints an identical second copy below a cut line on the same page, for handing to whoever collects payment. Independent of payment method — turn it on for cash or bank transfers alike.
+            </span>
+          </span>
+        </label>
       </div>
 
       {/* Signatories */}

@@ -13,6 +13,7 @@ export type RequestForPdf = {
   approvedBy: string;
   transfers: Transfer[];
   status: "PENDING" | "PAID";
+  printReceipt?: boolean;
   docType?: string;
   requestedSignature?: Uint8Array | null;
   approvedSignature?: Uint8Array | null;
@@ -32,10 +33,10 @@ const BASE = { font: 11, purchaseGap: 38, refToBodyGap: 40, headerGap: 24, lineG
 const MIN_SCALE = 0.45;
 const MIN_Y_BEFORE_SIGNATURE = 190;
 
-// A cash withdrawal is handed to the collector as their own take-away proof
-// of receipt, so it's rendered twice on the one page (office copy + collector
-// copy) — same compact layout, separated by a cut line. Tuned so a typical
-// short cash line still reads clearly at roughly half a letterhead page.
+// When a receipt copy is requested, the document is rendered twice on the
+// one page (office copy + a take-away copy for whoever collects payment) —
+// same compact layout, separated by a cut line. Tuned so a typical short
+// line still reads clearly at roughly half a letterhead page.
 const COMPACT_BASE = { font: 10, purchaseGap: 22, refToBodyGap: 24, headerGap: 16, lineGap: 14, groupGap: 5 };
 const COMPACT_MIN_SCALE = 0.55;
 // These three are tuned together so the signature block deterministically
@@ -54,10 +55,6 @@ function neededBodyHeight(isTransfer: boolean, transfers: Transfer[], base: type
     h += base.headerGap + t.amounts.length * base.lineGap + base.groupGap;
   }
   return h;
-}
-
-function isAllCash(transfers: Transfer[]): boolean {
-  return transfers.length > 0 && transfers.every((t) => t.paymentMethod === "CASH");
 }
 
 export async function generateRequestPdf(templateBytes: Uint8Array, data: RequestForPdf): Promise<Uint8Array> {
@@ -202,9 +199,9 @@ export async function generateRequestPdf(templateBytes: Uint8Array, data: Reques
     }
   }
 
-  if (isAllCash(data.transfers)) {
-    // Cash is handed over in person, so print an identical office copy and
-    // collector copy on the one page, split by a cut line.
+  if (data.printReceipt) {
+    // Print an identical office copy and receipt copy on the one page,
+    // split by a cut line, for handing to whoever collects payment.
     const half = height / 2;
 
     // The template's own logo/heading already sits at the top of the page

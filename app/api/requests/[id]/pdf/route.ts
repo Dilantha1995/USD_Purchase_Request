@@ -32,6 +32,7 @@ export async function GET(
       approvedBy: request.approvedBy,
       transfers: request.transfers as unknown as Transfer[],
       status: request.status,
+      printReceipt: request.printReceipt,
       docType: request.docType,
     }
   );

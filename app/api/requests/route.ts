@@ -18,6 +18,7 @@ type Body = {
   approvedBy: string;
   transfers: Transfer[];
   dealId?: string | null;
+  printReceipt?: boolean;
 };
 
 function clean(t: any): Transfer[] {
@@ -141,6 +142,7 @@ export async function POST(req: Request) {
               approvedBy: body.approvedBy?.trim() || "",
               transfers: transfers as any,
               dealId,
+              printReceipt: Boolean(body.printReceipt),
               createdById: session.id,
             },
           });
