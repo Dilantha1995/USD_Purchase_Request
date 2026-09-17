@@ -18,6 +18,8 @@ type Body = {
   approvedBy: string;
   transfers: Transfer[];
   printReceipt?: boolean;
+  useLetterLabels?: boolean;
+  continuousNumbering?: boolean;
 };
 
 function clean(t: any): Transfer[] {
@@ -158,6 +160,8 @@ export async function POST(req: Request) {
               approvedBy: body.approvedBy?.trim() || "",
               transfers: transfers as any,
               printReceipt: Boolean(body.printReceipt),
+              useLetterLabels: Boolean(body.useLetterLabels),
+              continuousNumbering: Boolean(body.continuousNumbering),
               createdById: session.id,
             },
           });

@@ -34,6 +34,8 @@ type Existing = {
   approvedBy: string;
   transfers: TransferDraft[];
   printReceipt?: boolean;
+  useLetterLabels?: boolean;
+  continuousNumbering?: boolean;
 };
 
 function todayISO() {
@@ -78,6 +80,8 @@ export default function NewRequestForm({
       : [{ sourceAccount: "", recipient: "", bankName: "", account: "", paymentMethod: "BANK", collectedBy: "", amounts: [""], dealIds: [defaultDealId || ""] }]
   );
   const [printReceipt, setPrintReceipt] = useState(existing?.printReceipt ?? false);
+  const [useLetterLabels, setUseLetterLabels] = useState(existing?.useLetterLabels ?? false);
+  const [continuousNumbering, setContinuousNumbering] = useState(existing?.continuousNumbering ?? false);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -161,6 +165,8 @@ export default function NewRequestForm({
       requestedBy,
       approvedBy,
       printReceipt,
+      useLetterLabels,
+      continuousNumbering,
       transfers: transfers.map((t) => ({
         sourceAccount: t.sourceAccount,
         recipient: t.recipient,
@@ -330,8 +336,8 @@ export default function NewRequestForm({
         <button type="button" onClick={addTransfer} className="btn-ghost">+ Add transfer to another account</button>
       </div>
 
-      {/* Receipt copy */}
-      <div className="card p-5">
+      {/* Document formatting */}
+      <div className="card space-y-4 p-5">
         <label className="flex items-start gap-2.5">
           <input
             type="checkbox"
@@ -343,6 +349,34 @@ export default function NewRequestForm({
             <span className="block text-sm font-medium text-ink">Include a receipt copy</span>
             <span className="block text-xs text-slate-500">
               Prints an identical second copy below a cut line on the same page, for handing to whoever collects payment. Independent of payment method — turn it on for cash or bank transfers alike.
+            </span>
+          </span>
+        </label>
+        <label className="flex items-start gap-2.5">
+          <input
+            type="checkbox"
+            className="mt-0.5"
+            checked={useLetterLabels}
+            onChange={(e) => setUseLetterLabels(e.target.checked)}
+          />
+          <span>
+            <span className="block text-sm font-medium text-ink">Label transfers with letters (A, B, C, …)</span>
+            <span className="block text-xs text-slate-500">
+              Puts a letter to the left of each transfer line, so a specific one can be pointed to unambiguously when there are several on one document.
+            </span>
+          </span>
+        </label>
+        <label className="flex items-start gap-2.5">
+          <input
+            type="checkbox"
+            className="mt-0.5"
+            checked={continuousNumbering}
+            onChange={(e) => setContinuousNumbering(e.target.checked)}
+          />
+          <span>
+            <span className="block text-sm font-medium text-ink">Number amounts continuously (1, 2, 3, …)</span>
+            <span className="block text-xs text-slate-500">
+              Amount-line numbers continue across every transfer instead of each transfer restarting at 1) — e.g. 1, 2, 3, 4 instead of 1, 2 then 1, 2 again.
             </span>
           </span>
         </label>

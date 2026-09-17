@@ -101,6 +101,8 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
         approvedSignatoryId: b.approvedSignatoryId || null,
         transfers: transfers as any,
         printReceipt: Boolean(b.printReceipt),
+        useLetterLabels: Boolean(b.useLetterLabels),
+        continuousNumbering: Boolean(b.continuousNumbering),
       },
       select: { id: true },
     });

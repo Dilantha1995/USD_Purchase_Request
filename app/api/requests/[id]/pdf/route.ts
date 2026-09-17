@@ -33,6 +33,8 @@ export async function GET(
       transfers: request.transfers as unknown as Transfer[],
       status: request.status,
       printReceipt: request.printReceipt,
+      useLetterLabels: request.useLetterLabels,
+      continuousNumbering: request.continuousNumbering,
       docType: request.docType,
     }
   );

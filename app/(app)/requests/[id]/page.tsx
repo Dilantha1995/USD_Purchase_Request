@@ -141,6 +141,8 @@ export default async function RequestDetail({ params }: { params: { id: string }
             <strong>{formatAmount(totalMvr(transfers))}</strong>
           </Row>
           <Row label="Receipt copy">{r.printReceipt ? "Included" : "Not included"}</Row>
+          <Row label="Letter labels">{r.useLetterLabels ? "On (A, B, C, …)" : "Off"}</Row>
+          <Row label="Amount numbering">{r.continuousNumbering ? "Continuous (1, 2, 3, …)" : "Restarts per transfer"}</Row>
           <Row label="Requested by">{r.requestedBy}</Row>
           <Row label="Approved by">{r.approvedBy || "\u2014"}</Row>
           <Row label="Created by">

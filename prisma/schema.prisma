@@ -117,6 +117,12 @@ model Request {
   // set explicitly per request instead of being implied by Cash vs Bank.
   printReceipt Boolean @default(false)
 
+  // Whether each transfer gets a sequential letter (A, B, C, …) to its left.
+  useLetterLabels Boolean @default(false)
+  // Whether amount-line numbers (1, 2, …) continue across the whole
+  // document instead of restarting at 1) for every transfer.
+  continuousNumbering Boolean @default(false)
+
   requestedSignatoryId String?
   approvedSignatoryId  String?
 

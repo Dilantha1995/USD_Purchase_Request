@@ -14,6 +14,8 @@ export type RequestForPdf = {
   transfers: Transfer[];
   status: "PENDING" | "PAID";
   printReceipt?: boolean;
+  useLetterLabels?: boolean;
+  continuousNumbering?: boolean;
   docType?: string;
   requestedSignature?: Uint8Array | null;
   approvedSignature?: Uint8Array | null;
@@ -135,15 +137,21 @@ export async function generateRequestPdf(templateBytes: Uint8Array, data: Reques
       y -= gap(opts.base.purchaseGap);
     }
 
+    // Only used when continuousNumbering is on — counts amount lines across
+    // every transfer instead of each transfer restarting its own 1), 2)…
+    let runningAmountIndex = 0;
+
     data.transfers.forEach((t, ti) => {
-      // A sequential letter (A, B, C, …) to the left of each transfer line,
-      // so a specific transfer can be pointed to/referenced unambiguously
+      // A sequential letter (A, B, C, …) to the left of each transfer line —
+      // optional, so a specific transfer can be pointed to unambiguously
       // when there are several on one document. It sits flush with the
       // same left edge as the title/date/ref/purchase lines above (MARGIN);
       // the transfer text and its amounts indent to make room for it.
-      const label = String.fromCharCode(65 + ti);
-      page.drawText(label, { x: MARGIN, y, size: size + 1, font: bold, color: COLOR_INK });
-      const bodyX = MARGIN + LABEL_INDENT;
+      const label = data.useLetterLabels ? String.fromCharCode(65 + ti) : null;
+      if (label) {
+        page.drawText(label, { x: MARGIN, y, size: size + 1, font: bold, color: COLOR_INK });
+      }
+      const bodyX = label ? MARGIN + LABEL_INDENT : MARGIN;
 
       if (t.paymentMethod === "CASH") {
         drawSegs(
@@ -169,7 +177,9 @@ export async function generateRequestPdf(templateBytes: Uint8Array, data: Reques
       }
       y -= gap(opts.base.headerGap);
       t.amounts.forEach((amt, i) => {
-        page.drawText(`${i + 1})`, { x: bodyX + 22, y, size, font, color: COLOR_INK });
+        runningAmountIndex++;
+        const displayIndex = data.continuousNumbering ? runningAmountIndex : i + 1;
+        page.drawText(`${displayIndex})`, { x: bodyX + 22, y, size, font, color: COLOR_INK });
         const note = t.notes && t.notes[i] ? ` - ${t.notes[i]}` : "";
         page.drawText(`${formatAmount(amt)}${note}`, { x: bodyX + 44, y, size, font, color: COLOR_INK });
         y -= gap(opts.base.lineGap);

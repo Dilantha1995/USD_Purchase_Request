@@ -55,6 +55,8 @@ export default async function EditRequestPage({ params }: { params: { id: string
     approvedBy: r.approvedBy,
     transfers,
     printReceipt: r.printReceipt,
+    useLetterLabels: r.useLetterLabels,
+    continuousNumbering: r.continuousNumbering,
   };
 
   return (
