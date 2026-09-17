@@ -22,6 +22,7 @@ export type RequestForPdf = {
 type Seg = { text: string; bold?: boolean };
 
 const MARGIN = 60;
+const LABEL_INDENT = 18; // room the transfer letter (A, B, C, …) takes before the transfer text
 const COLOR_INK = rgb(0.11, 0.14, 0.2);
 const COLOR_LINE = rgb(0.8, 0.8, 0.8);
 
@@ -137,9 +138,12 @@ export async function generateRequestPdf(templateBytes: Uint8Array, data: Reques
     data.transfers.forEach((t, ti) => {
       // A sequential letter (A, B, C, …) to the left of each transfer line,
       // so a specific transfer can be pointed to/referenced unambiguously
-      // when there are several on one document.
+      // when there are several on one document. It sits flush with the
+      // same left edge as the title/date/ref/purchase lines above (MARGIN);
+      // the transfer text and its amounts indent to make room for it.
       const label = String.fromCharCode(65 + ti);
-      page.drawText(label, { x: MARGIN - 22, y, size: size + 1, font: bold, color: COLOR_INK });
+      page.drawText(label, { x: MARGIN, y, size: size + 1, font: bold, color: COLOR_INK });
+      const bodyX = MARGIN + LABEL_INDENT;
 
       if (t.paymentMethod === "CASH") {
         drawSegs(
@@ -149,7 +153,7 @@ export async function generateRequestPdf(templateBytes: Uint8Array, data: Reques
             { text: ` paid to ${t.recipient} — collected by ` },
             { text: t.collectedBy || "—", bold: true },
           ],
-          MARGIN, y, size
+          bodyX, y, size
         );
       } else {
         drawSegs(
@@ -160,14 +164,14 @@ export async function generateRequestPdf(templateBytes: Uint8Array, data: Reques
             ...(t.bankName ? [{ text: ` ${t.bankName}`, bold: true }] : []),
             { text: ` A/C No. ${t.account}` },
           ],
-          MARGIN, y, size
+          bodyX, y, size
         );
       }
       y -= gap(opts.base.headerGap);
       t.amounts.forEach((amt, i) => {
-        page.drawText(`${i + 1})`, { x: MARGIN + 22, y, size, font, color: COLOR_INK });
+        page.drawText(`${i + 1})`, { x: bodyX + 22, y, size, font, color: COLOR_INK });
         const note = t.notes && t.notes[i] ? ` - ${t.notes[i]}` : "";
-        page.drawText(`${formatAmount(amt)}${note}`, { x: MARGIN + 44, y, size, font, color: COLOR_INK });
+        page.drawText(`${formatAmount(amt)}${note}`, { x: bodyX + 44, y, size, font, color: COLOR_INK });
         y -= gap(opts.base.lineGap);
       });
       y -= gap(opts.base.groupGap);
