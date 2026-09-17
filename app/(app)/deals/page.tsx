@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { formatAmount, formatDate } from "@/lib/format";
-import { computeDealTotals, summarizeRequestStatuses } from "@/lib/deal";
+import { computeDealTotals, summarizeRequestStatuses, requestTouchesDeal } from "@/lib/deal";
 
 export const dynamic = "force-dynamic";
 
@@ -38,19 +38,31 @@ export default async function DealsPage({
   if (status) where.status = status;
   if (from || to) where.date = dateFilter;
 
-  const deals = await prisma.deal.findMany({
-    where,
-    include: {
-      company: { select: { id: true, name: true, brandColor: true } },
-      supplier: { select: { id: true, name: true } },
-      requests: { select: { transfers: true, status: true } },
-      usdReceipts: { select: { usdAmount: true } },
-    },
-    orderBy: { createdAt: "desc" },
-  });
+  const [deals, allRequests] = await Promise.all([
+    prisma.deal.findMany({
+      where,
+      include: {
+        company: { select: { id: true, name: true, brandColor: true } },
+        supplier: { select: { id: true, name: true } },
+        usdReceipts: { select: { usdAmount: true } },
+      },
+      orderBy: { createdAt: "desc" },
+    }),
+    // One amount line can pay into a different deal than the request's
+    // other lines, so totals/status are computed against every request,
+    // not just those whose (legacy) whole-request dealId matches.
+    prisma.request.findMany({ select: { dealId: true, transfers: true, status: true } }),
+  ]);
 
   const rows = deals
-    .map((d: (typeof deals)[number]) => ({ deal: d, totals: computeDealTotals(d, d.requests, d.usdReceipts) }))
+    .map((d: (typeof deals)[number]) => {
+      const dealRequests = allRequests.filter((r) => requestTouchesDeal(r, d.id));
+      return {
+        deal: d,
+        totals: computeDealTotals(d, allRequests, d.usdReceipts),
+        requestsSummary: summarizeRequestStatuses(dealRequests),
+      };
+    })
     .filter(({ deal }: { deal: (typeof deals)[number] }) =>
       q ? `${deal.refNo} ${deal.name} ${deal.supplier.name}`.toLowerCase().includes(q) : true
     );
@@ -157,7 +169,7 @@ export default async function DealsPage({
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {rows.map(({ deal: d, totals: t }: (typeof rows)[number]) => (
+            {rows.map(({ deal: d, totals: t, requestsSummary }: (typeof rows)[number]) => (
               <tr key={d.id} className="hover:bg-slate-50">
                 <td className="px-4 py-3 font-mono text-xs">{d.refNo}</td>
                 <td className="px-4 py-3">
@@ -179,7 +191,7 @@ export default async function DealsPage({
                     {d.status === "CLOSED" ? "Closed" : "Open"}
                   </span>
                 </td>
-                <td className="px-4 py-3 text-slate-600">{summarizeRequestStatuses(d.requests)}</td>
+                <td className="px-4 py-3 text-slate-600">{requestsSummary}</td>
                 <td className="px-4 py-3 text-right">
                   <Link href={`/deals/${d.id}`} className="text-sm font-medium text-ink hover:underline">View</Link>
                 </td>

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { formatAmount, formatDate, totalMvr, Transfer } from "@/lib/format";
+import { distinctDealIds } from "@/lib/deal";
 
 export const dynamic = "force-dynamic";
 
@@ -40,21 +41,30 @@ export default async function Dashboard({
     include: {
       company: { select: { id: true, name: true, brandColor: true } },
       createdBy: { select: { name: true } },
-      deal: { select: { id: true, refNo: true } },
     },
     orderBy: { createdAt: "desc" },
     take: 1000,
   });
 
+  // A request's amount lines can each pay into a different deal — batch-
+  // resolve every distinct one touched across all rows in one query.
+  const dealIdsByRequest = new Map(rows.map((r: (typeof rows)[number]) => [r.id, distinctDealIds(r)]));
+  const allDealIds = Array.from(new Set(Array.from(dealIdsByRequest.values()).flat()));
+  const linkedDeals = allDealIds.length
+    ? await prisma.deal.findMany({ where: { id: { in: allDealIds } }, select: { id: true, refNo: true } })
+    : [];
+  const dealById = new Map(linkedDeals.map((d) => [d.id, d]));
+
   const filtered = q
     ? rows.filter((r: (typeof rows)[number]) => {
         const transfers = r.transfers as unknown as Transfer[];
+        const dealRefs = (dealIdsByRequest.get(r.id) || []).map((id: string) => dealById.get(id)?.refNo || "");
         const hay = [
           r.refNo,
           r.source,
           r.requestedBy,
           r.approvedBy,
-          r.deal?.refNo || "",
+          ...dealRefs,
           ...transfers.map((t) => `${t.recipient} ${t.account}`),
         ]
           .join(" ")
@@ -157,8 +167,19 @@ export default async function Dashboard({
                 <td className="px-4 py-3 text-slate-600">{formatDate(r.date)}</td>
                 <td className="px-4 py-3 text-slate-600">{r.source}</td>
                 <td className="px-4 py-3 font-mono text-xs">
-                  {r.deal ? (
-                    <Link href={`/deals/${r.deal.id}`} className="text-ink hover:underline">{r.deal.refNo}</Link>
+                  {(dealIdsByRequest.get(r.id) || []).length > 0 ? (
+                    <span className="space-x-1">
+                      {(dealIdsByRequest.get(r.id) || []).map((id: string, i: number) => {
+                        const d = dealById.get(id);
+                        if (!d) return null;
+                        return (
+                          <span key={id}>
+                            {i > 0 && <span className="text-slate-300">, </span>}
+                            <Link href={`/deals/${d.id}`} className="text-ink hover:underline">{d.refNo}</Link>
+                          </span>
+                        );
+                      })}
+                    </span>
                   ) : (
                     <span className="text-slate-300">—</span>
                   )}

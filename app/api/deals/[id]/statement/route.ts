@@ -9,19 +9,21 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
   const session = await getSession();
   if (!session) return new Response("Unauthorized", { status: 401 });
 
-  const deal = await prisma.deal.findUnique({
-    where: { id: params.id },
-    include: {
-      company: { select: { name: true } },
-      supplier: { select: { name: true } },
-      requests: { orderBy: { date: "asc" } },
-      usdReceipts: { orderBy: { date: "asc" } },
-    },
-  });
+  const [deal, allRequests] = await Promise.all([
+    prisma.deal.findUnique({
+      where: { id: params.id },
+      include: {
+        company: { select: { name: true } },
+        supplier: { select: { name: true } },
+        usdReceipts: { orderBy: { date: "asc" } },
+      },
+    }),
+    prisma.request.findMany({ orderBy: { date: "asc" } }),
+  ]);
   if (!deal) return new Response("Deal not found", { status: 404 });
 
-  const totals = computeDealTotals(deal, deal.requests, deal.usdReceipts);
-  const ledger = buildDealLedger(deal.requests, deal.usdReceipts);
+  const totals = computeDealTotals(deal, allRequests, deal.usdReceipts);
+  const ledger = buildDealLedger(deal.id, allRequests, deal.usdReceipts);
 
   const bytes = await generateDealStatementPdf({
     companyName: deal.company.name,

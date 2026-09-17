@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession, can } from "@/lib/auth";
-import { computeDealTotals, buildDealLedger } from "@/lib/deal";
+import { computeDealTotals, buildDealLedger, requestTouchesDeal } from "@/lib/deal";
 import { buildDealName } from "@/lib/format";
 
 export const runtime = "nodejs";
@@ -10,22 +10,25 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const deal = await prisma.deal.findUnique({
-    where: { id: params.id },
-    include: {
-      company: { select: { id: true, name: true, brandColor: true } },
-      supplier: { select: { id: true, name: true } },
-      createdBy: { select: { name: true } },
-      requests: { orderBy: { date: "asc" } },
-      usdReceipts: { orderBy: { date: "asc" } },
-      rateChanges: { orderBy: { changedAt: "asc" } },
-    },
-  });
+  const [deal, allRequests] = await Promise.all([
+    prisma.deal.findUnique({
+      where: { id: params.id },
+      include: {
+        company: { select: { id: true, name: true, brandColor: true } },
+        supplier: { select: { id: true, name: true } },
+        createdBy: { select: { name: true } },
+        usdReceipts: { orderBy: { date: "asc" } },
+        rateChanges: { orderBy: { changedAt: "asc" } },
+      },
+    }),
+    prisma.request.findMany({ orderBy: { date: "asc" } }),
+  ]);
   if (!deal) return NextResponse.json({ error: "Deal not found" }, { status: 404 });
 
-  const totals = computeDealTotals(deal, deal.requests, deal.usdReceipts);
-  const ledger = buildDealLedger(deal.requests, deal.usdReceipts);
-  return NextResponse.json({ ...deal, totals, ledger });
+  const dealRequests = allRequests.filter((r) => requestTouchesDeal(r, deal.id));
+  const totals = computeDealTotals(deal, allRequests, deal.usdReceipts);
+  const ledger = buildDealLedger(deal.id, allRequests, deal.usdReceipts);
+  return NextResponse.json({ ...deal, requests: dealRequests, totals, ledger });
 }
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
@@ -124,10 +127,15 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
 
   const deal = await prisma.deal.findUnique({
     where: { id: params.id },
-    include: { _count: { select: { requests: true, usdReceipts: true } } },
+    include: { _count: { select: { usdReceipts: true } } },
   });
   if (!deal) return NextResponse.json({ error: "Deal not found" }, { status: 404 });
-  if (deal._count.requests > 0 || deal._count.usdReceipts > 0)
+
+  // A request's link to this deal can live on any of its amount lines, not
+  // just the legacy whole-request dealId, so every request is a candidate.
+  const allRequests = await prisma.request.findMany({ select: { dealId: true, transfers: true } });
+  const hasLinkedRequests = allRequests.some((r) => requestTouchesDeal(r, deal.id));
+  if (hasLinkedRequests || deal._count.usdReceipts > 0)
     return NextResponse.json(
       { error: "This deal has purchase requests or USD receipts recorded against it and can't be deleted" },
       { status: 400 }

@@ -7,6 +7,8 @@ export type Transfer = {
   paymentMethod?: "BANK" | "CASH";
   collectedBy?: string;
   notes?: string[];
+  /** Deal each amount line pays into, parallel to `amounts` (null/absent = standalone). */
+  dealIds?: (string | null)[];
 };
 
 /** 4,000 / 61,680.00 -> grouped with commas. Keeps up to 2 decimals only if needed. */

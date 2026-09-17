@@ -17,7 +17,6 @@ type Body = {
   requestedBy: string;
   approvedBy: string;
   transfers: Transfer[];
-  dealId?: string | null;
   printReceipt?: boolean;
 };
 
@@ -26,6 +25,19 @@ function clean(t: any): Transfer[] {
   return t
     .map((g) => {
       const paymentMethod: "BANK" | "CASH" = g?.paymentMethod === "CASH" ? "CASH" : "BANK";
+      // amounts and dealIds are filtered together so a dropped invalid
+      // amount doesn't shift a later line's deal onto the wrong index.
+      const rawAmounts = Array.isArray(g?.amounts) ? g.amounts : [];
+      const rawDealIds = Array.isArray(g?.dealIds) ? g.dealIds : [];
+      const amounts: number[] = [];
+      const dealIds: (string | null)[] = [];
+      rawAmounts.forEach((a: any, i: number) => {
+        const n = Number(a);
+        if (Number.isFinite(n) && n > 0) {
+          amounts.push(n);
+          dealIds.push(rawDealIds[i] ? String(rawDealIds[i]) : null);
+        }
+      });
       return {
         recipient: String(g?.recipient ?? "").trim(),
         account: String(g?.account ?? "").trim(),
@@ -33,13 +45,17 @@ function clean(t: any): Transfer[] {
         bankName: String(g?.bankName ?? "").trim() || undefined,
         paymentMethod,
         collectedBy: String(g?.collectedBy ?? "").trim() || undefined,
-        amounts: (Array.isArray(g?.amounts) ? g.amounts : [])
-          .map((a: any) => Number(a))
-          .filter((a: number) => Number.isFinite(a) && a > 0),
+        amounts,
+        dealIds: dealIds.some((d) => d) ? dealIds : undefined,
         notes: Array.isArray(g?.notes) ? g.notes.map((n: any) => String(n ?? "").trim()) : undefined,
       };
     })
     .filter((g) => g.recipient && g.amounts.length > 0 && (g.paymentMethod === "CASH" ? g.collectedBy : g.account));
+}
+
+/** Every distinct deal id referenced by any amount line across all transfers. */
+function referencedDealIds(transfers: Transfer[]): string[] {
+  return Array.from(new Set(transfers.flatMap((t) => (t.dealIds || []).filter((d): d is string => !!d))));
 }
 
 export async function POST(req: Request) {
@@ -70,8 +86,6 @@ export async function POST(req: Request) {
   if (transfers.length === 0)
     return NextResponse.json({ error: "Add at least one transfer with an amount" }, { status: 400 });
 
-  const dealId = body.dealId?.trim() || null;
-
   try {
     const created = await retryOnConflict(
       () =>
@@ -79,10 +93,12 @@ export async function POST(req: Request) {
           const company = await tx.company.findUnique({ where: { id: body.companyId } });
           if (!company) throw new Error("Unknown company");
 
-          if (dealId) {
-            const deal = await tx.deal.findUnique({ where: { id: dealId } });
-            if (!deal) throw new Error("Selected deal not found");
-            if (deal.companyId !== company.id) throw new Error("Selected deal belongs to a different company");
+          const dealIds = referencedDealIds(transfers);
+          if (dealIds.length > 0) {
+            const linkedDeals = await tx.deal.findMany({ where: { id: { in: dealIds } } });
+            if (linkedDeals.length !== dealIds.length) throw new Error("One or more selected deals were not found");
+            if (linkedDeals.some((d) => d.companyId !== company.id))
+              throw new Error("A selected deal belongs to a different company");
           }
 
           // Serial restarts at 1 each calendar month (based on the document's YYMM).
@@ -141,7 +157,6 @@ export async function POST(req: Request) {
               requestedBy: body.requestedBy?.trim() || session.name,
               approvedBy: body.approvedBy?.trim() || "",
               transfers: transfers as any,
-              dealId,
               printReceipt: Boolean(body.printReceipt),
               createdById: session.id,
             },

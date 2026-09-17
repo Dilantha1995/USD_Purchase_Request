@@ -9,6 +9,19 @@ function cleanTransfers(t: any) {
   return t
     .map((g) => {
       const paymentMethod = g?.paymentMethod === "CASH" ? "CASH" : "BANK";
+      // amounts and dealIds are filtered together so a dropped invalid
+      // amount doesn't shift a later line's deal onto the wrong index.
+      const rawAmounts = Array.isArray(g?.amounts) ? g.amounts : [];
+      const rawDealIds = Array.isArray(g?.dealIds) ? g.dealIds : [];
+      const amounts: number[] = [];
+      const dealIds: (string | null)[] = [];
+      rawAmounts.forEach((a: any, i: number) => {
+        const n = Number(a);
+        if (Number.isFinite(n) && n > 0) {
+          amounts.push(n);
+          dealIds.push(rawDealIds[i] ? String(rawDealIds[i]) : null);
+        }
+      });
       return {
         recipient: String(g?.recipient ?? "").trim(),
         account: String(g?.account ?? "").trim(),
@@ -17,12 +30,16 @@ function cleanTransfers(t: any) {
         paymentMethod,
         collectedBy: String(g?.collectedBy ?? "").trim() || undefined,
         supplierId: g?.supplierId || null,
-        amounts: (Array.isArray(g?.amounts) ? g.amounts : [])
-          .map((a: any) => Number(a))
-          .filter((a: number) => Number.isFinite(a) && a > 0),
+        amounts,
+        dealIds: dealIds.some((d) => d) ? dealIds : undefined,
       };
     })
     .filter((g) => g.recipient && g.amounts.length > 0 && (g.paymentMethod === "CASH" ? g.collectedBy : g.account));
+}
+
+/** Every distinct deal id referenced by any amount line across all transfers. */
+function referencedDealIds(transfers: ReturnType<typeof cleanTransfers>): string[] {
+  return Array.from(new Set(transfers.flatMap((t) => (t.dealIds || []).filter((d): d is string => !!d))));
 }
 
 // Toggle status (kept for backward compatibility) - any logged in user
@@ -46,12 +63,13 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     const bankRate = settings?.defaultBankRate ?? 15.42;
     const srcAcct = (String(b.sourceAccount || "").trim() || transfers[0]?.sourceAccount || "").trim();
 
-    const dealId = b.dealId?.trim() || null;
-    if (dealId) {
-      const deal = await prisma.deal.findUnique({ where: { id: dealId } });
-      if (!deal) return NextResponse.json({ error: "Selected deal not found" }, { status: 400 });
-      if (deal.companyId !== existing.companyId)
-        return NextResponse.json({ error: "Selected deal belongs to a different company" }, { status: 400 });
+    const dealIds = referencedDealIds(transfers);
+    if (dealIds.length > 0) {
+      const linkedDeals = await prisma.deal.findMany({ where: { id: { in: dealIds } } });
+      if (linkedDeals.length !== dealIds.length)
+        return NextResponse.json({ error: "One or more selected deals were not found" }, { status: 400 });
+      if (linkedDeals.some((d) => d.companyId !== existing.companyId))
+        return NextResponse.json({ error: "A selected deal belongs to a different company" }, { status: 400 });
     }
 
     let refNo: string | undefined;
@@ -73,7 +91,10 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
         exchangeLoss: (rt - bankRate) * usd,
         source: String(b.source || "").trim(),
         sourceAccount: srcAcct,
-        dealId,
+        // The legacy whole-request dealId is superseded by per-amount-line
+        // deal tags (already carried forward into transfers[].dealIds by
+        // the edit form for older requests), so it's cleared on every save.
+        dealId: null,
         requestedBy: String(b.requestedBy || "").trim(),
         approvedBy: String(b.approvedBy || "").trim(),
         requestedSignatoryId: b.requestedSignatoryId || null,

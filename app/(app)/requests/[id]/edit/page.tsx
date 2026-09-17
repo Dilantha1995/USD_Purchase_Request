@@ -23,7 +23,10 @@ export default async function EditRequestPage({ params }: { params: { id: string
     prisma.bankAccount.findMany({ where: { active: true }, select: { id: true, label: true, companyId: true }, orderBy: { label: "asc" } }),
   ]);
   if (!r) notFound();
-  const deals = await getAssignableDeals(r.dealId, { onlyPending: false });
+  // Every deal is offered here (not just pending ones) — attaching an
+  // already-created amount line to a deal after the fact is a bookkeeping
+  // correction, not a new payment.
+  const deals = await getAssignableDeals(null, { onlyPending: false });
 
   const transfers = (r.transfers as unknown as Transfer[]).map((t) => ({
     sourceAccount: t.sourceAccount || r.sourceAccount || "",
@@ -33,6 +36,10 @@ export default async function EditRequestPage({ params }: { params: { id: string
     paymentMethod: t.paymentMethod === "CASH" ? ("CASH" as const) : ("BANK" as const),
     collectedBy: t.collectedBy || "",
     amounts: t.amounts.map((a) => String(a)),
+    // Requests created before per-line deal selection existed only had one
+    // deal for the whole request (r.dealId) — fall back to it per line so
+    // editing an old request still shows its deal correctly.
+    dealIds: t.amounts.map((_, i) => t.dealIds?.[i] || r.dealId || ""),
   }));
 
   const existing = {
@@ -44,7 +51,6 @@ export default async function EditRequestPage({ params }: { params: { id: string
     usdAmount: String(r.usdAmount),
     rate: String(r.rate),
     source: r.source,
-    dealId: r.dealId,
     requestedBy: r.requestedBy,
     approvedBy: r.approvedBy,
     transfers,

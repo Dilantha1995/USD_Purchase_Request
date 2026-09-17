@@ -35,16 +35,20 @@ export async function GET(req: Request) {
     if (status) where.status = status;
   }
 
-  const deals = await prisma.deal.findMany({
-    where,
-    include: {
-      company: { select: { id: true, name: true } },
-      supplier: { select: { name: true } },
-      requests: { orderBy: { date: "asc" } },
-      usdReceipts: { orderBy: { date: "asc" } },
-    },
-    orderBy: { refNo: "asc" },
-  });
+  const [deals, allRequests] = await Promise.all([
+    prisma.deal.findMany({
+      where,
+      include: {
+        company: { select: { id: true, name: true } },
+        supplier: { select: { name: true } },
+        usdReceipts: { orderBy: { date: "asc" } },
+      },
+      orderBy: { refNo: "asc" },
+    }),
+    // One amount line can pay into a different deal than the request's
+    // other lines, so every deal's ledger is built against the full set.
+    prisma.request.findMany({ orderBy: { date: "asc" } }),
+  ]);
 
   const fromDate = from ? new Date(`${from}T00:00:00Z`) : null;
   const toDate = to ? new Date(`${to}T23:59:59Z`) : null;
@@ -54,14 +58,14 @@ export async function GET(req: Request) {
       dealId || !q ? true : `${d.refNo} ${d.name} ${d.supplier.name}`.toLowerCase().includes(q)
     )
     .map((d: (typeof deals)[number]) => {
-      const entries = buildDealLedger(d.requests, d.usdReceipts).filter((e) => {
+      const entries = buildDealLedger(d.id, allRequests, d.usdReceipts).filter((e) => {
         if (fromDate && e.date < fromDate) return false;
         if (toDate && e.date > toDate) return false;
         return true;
       });
       // Pending amounts reflect the deal's current standing overall, not just
       // the transactions within the selected period.
-      const totals = computeDealTotals(d, d.requests, d.usdReceipts);
+      const totals = computeDealTotals(d, allRequests, d.usdReceipts);
       return { deal: d, entries, mvrPending: Math.max(totals.mvrPending, 0), usdPending: Math.max(totals.usdPending, 0) };
     })
     .filter(({ entries }: { entries: LedgerEntry[] }) => entries.length > 0);

@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { formatAmount, formatDate } from "@/lib/format";
-import { computeDealTotals, buildDealLedger } from "@/lib/deal";
+import { computeDealTotals, buildDealLedger, requestTouchesDeal } from "@/lib/deal";
 import DealActions from "./DealActions";
 import LedgerTable, { LedgerRowVM } from "./LedgerTable";
 
@@ -15,21 +15,26 @@ export default async function DealDetail({ params }: { params: { id: string } })
   const canEdit = isAdmin || Boolean(me?.canEditRequests);
   const canDelete = isAdmin || Boolean(me?.canDeleteRequests);
 
-  const deal = await prisma.deal.findUnique({
-    where: { id: params.id },
-    include: {
-      company: { select: { id: true, name: true, brandColor: true } },
-      supplier: { select: { id: true, name: true } },
-      createdBy: { select: { name: true } },
-      requests: { orderBy: { date: "asc" } },
-      usdReceipts: { orderBy: { date: "asc" } },
-      rateChanges: { orderBy: { changedAt: "asc" } },
-    },
-  });
+  const [deal, allRequests] = await Promise.all([
+    prisma.deal.findUnique({
+      where: { id: params.id },
+      include: {
+        company: { select: { id: true, name: true, brandColor: true } },
+        supplier: { select: { id: true, name: true } },
+        createdBy: { select: { name: true } },
+        usdReceipts: { orderBy: { date: "asc" } },
+        rateChanges: { orderBy: { changedAt: "asc" } },
+      },
+    }),
+    // One amount line can pay into a different deal than the request's
+    // other lines, so every request is a candidate, filtered per deal below.
+    prisma.request.findMany({ orderBy: { date: "asc" } }),
+  ]);
   if (!deal) notFound();
 
-  const totals = computeDealTotals(deal, deal.requests, deal.usdReceipts);
-  const ledger = buildDealLedger(deal.requests, deal.usdReceipts);
+  const dealRequests = allRequests.filter((r) => requestTouchesDeal(r, deal.id));
+  const totals = computeDealTotals(deal, allRequests, deal.usdReceipts);
+  const ledger = buildDealLedger(deal.id, allRequests, deal.usdReceipts);
   const ledgerRows: LedgerRowVM[] = ledger.map((e, i) => ({
     key: e.receiptId || `${e.requestId}-${i}`,
     dateLabel: formatDate(e.date),
@@ -181,7 +186,7 @@ export default async function DealDetail({ params }: { params: { id: string } })
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {deal.requests.map((r) => (
+              {dealRequests.map((r) => (
                 <tr key={r.id} className="hover:bg-slate-50">
                   <td className="px-4 py-2 font-mono text-xs">{r.refNo}</td>
                   <td className="px-4 py-2 text-slate-600">{formatDate(r.date)}</td>
@@ -197,7 +202,7 @@ export default async function DealDetail({ params }: { params: { id: string } })
                   </td>
                 </tr>
               ))}
-              {deal.requests.length === 0 && (
+              {dealRequests.length === 0 && (
                 <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-500">No purchase requests linked yet.</td></tr>
               )}
             </tbody>

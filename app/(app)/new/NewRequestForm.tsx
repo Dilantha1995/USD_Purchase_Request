@@ -9,7 +9,16 @@ type SupplierAccount = { name: string; bankName?: string; accountNo?: string };
 type Supplier = { id: string; name: string; accounts?: SupplierAccount[] | null };
 type BankAccount = { id: string; label: string; companyId?: string | null };
 type PaymentMethod = "BANK" | "CASH";
-type TransferDraft = { sourceAccount: string; recipient: string; bankName: string; account: string; paymentMethod: PaymentMethod; collectedBy: string; amounts: string[] };
+type TransferDraft = {
+  sourceAccount: string;
+  recipient: string;
+  bankName: string;
+  account: string;
+  paymentMethod: PaymentMethod;
+  collectedBy: string;
+  amounts: string[];
+  dealIds: string[]; // parallel to amounts — which deal (if any) each line pays into
+};
 type Deal = { id: string; refNo: string; name: string; companyId: string; supplierId: string; rate: number; mvrPending: number; usdPending: number; pending: boolean; status?: "OPEN" | "CLOSED" };
 
 type Existing = {
@@ -21,7 +30,6 @@ type Existing = {
   usdAmount: string;
   rate: string;
   source: string;
-  dealId?: string | null;
   requestedBy: string;
   approvedBy: string;
   transfers: TransferDraft[];
@@ -47,20 +55,16 @@ export default function NewRequestForm({
   const router = useRouter();
   const isEdit = !!existing;
   const allDeals = deals || [];
-  const linkedDeal = existing?.dealId ? allDeals.find((d) => d.id === existing.dealId) : undefined;
   const preselectedDeal = !isEdit && defaultDealId ? allDeals.find((d) => d.id === defaultDealId) : undefined;
-  const initialDeal = linkedDeal ?? preselectedDeal;
 
-  const [companyId, setCompanyId] = useState(existing?.companyId ?? initialDeal?.companyId ?? companies[0]?.id ?? "");
+  const [companyId, setCompanyId] = useState(existing?.companyId ?? preselectedDeal?.companyId ?? companies[0]?.id ?? "");
   const company = companies.find((c) => c.id === companyId);
 
   const [refNo, setRefNo] = useState(existing?.refNo ?? "");
   const [date, setDate] = useState(existing?.date ?? todayISO());
   const [usdAmount, setUsdAmount] = useState(existing?.usdAmount ?? "");
-  const [rate, setRate] = useState(existing?.rate ?? (initialDeal ? String(initialDeal.rate) : ""));
-  const [dealId, setDealId] = useState(initialDeal?.id ?? "");
+  const [rate, setRate] = useState(existing?.rate ?? "");
   const [supplierId, setSupplierId] = useState(() => {
-    if (initialDeal) return initialDeal.supplierId;
     if (!existing) return "";
     const m = suppliers.find((s) => s.name === existing.source);
     return m?.id ?? "";
@@ -69,29 +73,26 @@ export default function NewRequestForm({
   const [requestedBy, setRequestedBy] = useState(existing?.requestedBy ?? defaultRequestedBy);
   const [approvedBy, setApprovedBy] = useState(existing?.approvedBy ?? "");
   const [transfers, setTransfers] = useState<TransferDraft[]>(
-    existing?.transfers?.length ? existing.transfers : [{ sourceAccount: "", recipient: "", bankName: "", account: "", paymentMethod: "BANK", collectedBy: "", amounts: [""] }]
+    existing?.transfers?.length
+      ? existing.transfers
+      : [{ sourceAccount: "", recipient: "", bankName: "", account: "", paymentMethod: "BANK", collectedBy: "", amounts: [""], dealIds: [defaultDealId || ""] }]
   );
   const [printReceipt, setPrintReceipt] = useState(existing?.printReceipt ?? false);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const selectedDeal = allDeals.find((d) => d.id === dealId);
   const dealsForCompany = allDeals.filter((d) => d.companyId === companyId);
-
-  function pickDeal(id: string) {
-    setDealId(id);
-    const d = allDeals.find((x) => x.id === id);
-    if (d) {
-      setSupplierId(d.supplierId);
-      setRate(String(d.rate));
-    }
-  }
 
   function changeCompany(id: string) {
     setCompanyId(id);
-    if (dealId && !allDeals.some((d) => d.id === dealId && d.companyId === id)) {
-      setDealId("");
-    }
+    // Amount lines tagged with a deal that no longer matches the new company
+    // go back to standalone, rather than silently keeping an invalid pick.
+    setTransfers((ts) =>
+      ts.map((t) => ({
+        ...t,
+        dealIds: t.dealIds.map((d) => (d && allDeals.some((deal) => deal.id === d && deal.companyId === id) ? d : "")),
+      }))
+    );
   }
 
   const selectedSupplier = suppliers.find((s) => s.id === supplierId);
@@ -121,13 +122,26 @@ export default function NewRequestForm({
 
   const setTransfer = (i: number, patch: Partial<TransferDraft>) =>
     setTransfers((ts) => ts.map((t, idx) => (idx === i ? { ...t, ...patch } : t)));
-  const addTransfer = () => setTransfers((ts) => [...ts, { sourceAccount: ts[ts.length - 1]?.sourceAccount || "", recipient: "", bankName: "", account: "", paymentMethod: "BANK", collectedBy: "", amounts: [""] }]);
+  const addTransfer = () =>
+    setTransfers((ts) => [
+      ...ts,
+      { sourceAccount: ts[ts.length - 1]?.sourceAccount || "", recipient: "", bankName: "", account: "", paymentMethod: "BANK", collectedBy: "", amounts: [""], dealIds: [""] },
+    ]);
   const removeTransfer = (i: number) => setTransfers((ts) => (ts.length > 1 ? ts.filter((_, idx) => idx !== i) : ts));
   const setAmount = (ti: number, ai: number, val: string) =>
     setTransfers((ts) => ts.map((t, idx) => (idx === ti ? { ...t, amounts: t.amounts.map((a, j) => (j === ai ? val : a)) } : t)));
-  const addAmount = (ti: number) => setTransfers((ts) => ts.map((t, idx) => (idx === ti ? { ...t, amounts: [...t.amounts, ""] } : t)));
+  const setDealId = (ti: number, ai: number, val: string) =>
+    setTransfers((ts) => ts.map((t, idx) => (idx === ti ? { ...t, dealIds: t.dealIds.map((d, j) => (j === ai ? val : d)) } : t)));
+  const addAmount = (ti: number) =>
+    setTransfers((ts) => ts.map((t, idx) => (idx === ti ? { ...t, amounts: [...t.amounts, ""], dealIds: [...t.dealIds, ""] } : t)));
   const removeAmount = (ti: number, ai: number) =>
-    setTransfers((ts) => ts.map((t, idx) => (idx === ti && t.amounts.length > 1 ? { ...t, amounts: t.amounts.filter((_, j) => j !== ai) } : t)));
+    setTransfers((ts) =>
+      ts.map((t, idx) =>
+        idx === ti && t.amounts.length > 1
+          ? { ...t, amounts: t.amounts.filter((_, j) => j !== ai), dealIds: t.dealIds.filter((_, j) => j !== ai) }
+          : t
+      )
+    );
 
   function pickRecipientAccount(ti: number, idx: string) {
     const a = supplierAccounts[Number(idx)];
@@ -144,7 +158,6 @@ export default function NewRequestForm({
       usdAmount: parseFloat(usdAmount),
       rate: parseFloat(rate),
       source: effectiveSource,
-      dealId: dealId || null,
       requestedBy,
       approvedBy,
       printReceipt,
@@ -155,7 +168,8 @@ export default function NewRequestForm({
         account: t.account,
         paymentMethod: t.paymentMethod,
         collectedBy: t.collectedBy,
-        amounts: t.amounts.map((a) => parseFloat(a)).filter((n) => !isNaN(n) && n > 0),
+        amounts: t.amounts.map((a) => parseFloat(a)),
+        dealIds: t.dealIds.map((d) => d || null),
       })),
     };
     let res: Response;
@@ -211,28 +225,6 @@ export default function NewRequestForm({
         </div>
       )}
 
-      {/* Deal */}
-      <div className="card space-y-3 p-5">
-        <label className="label">Part of a deal? (optional — pays down an existing dollar purchase agreement)</label>
-        <select className="input" value={dealId} onChange={(e) => pickDeal(e.target.value)}>
-          <option value="">— Standalone purchase, not part of a deal —</option>
-          {dealsForCompany.map((d) => (
-            <option key={d.id} value={d.id}>
-              {d.refNo} — {d.name} ({d.mvrPending > 0.5 ? `MVR pending ${formatAmount(d.mvrPending)}` : "fully paid"}{d.status === "CLOSED" ? " · Closed" : ""})
-            </option>
-          ))}
-        </select>
-        {selectedDeal && (
-          <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
-            Deal rate <strong>{selectedDeal.rate}</strong> — MVR pending <strong>{formatAmount(Math.max(selectedDeal.mvrPending, 0))}</strong>
-            {" · "}USD {selectedDeal.usdPending < -0.5 ? "received in advance" : "pending"}{" "}
-            <strong>{formatAmount(Math.abs(selectedDeal.usdPending))}</strong>
-            {selectedDeal.status === "CLOSED" ? " · this deal is closed" : ""}.{" "}
-            <a href={`/deals/${selectedDeal.id}`} className="underline">View deal</a>
-          </p>
-        )}
-      </div>
-
       {/* Purchase details */}
       <div className="card space-y-4 p-5">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -240,22 +232,21 @@ export default function NewRequestForm({
           <div><label className="label">USD amount (this payment)</label><input type="number" step="0.01" min="0" className="input" value={usdAmount} onChange={(e) => setUsdAmount(e.target.value)} placeholder="4000" required /></div>
           <div>
             <label className="label">Rate</label>
-            <input type="number" step="0.0001" min="0" className="input" value={rate} onChange={(e) => setRate(e.target.value)} placeholder="20.40" required readOnly={!!selectedDeal} />
-            {selectedDeal && <p className="mt-1 text-xs text-slate-400">Locked to the deal&apos;s agreed rate. Change it from the deal page instead.</p>}
+            <input type="number" step="0.0001" min="0" className="input" value={rate} onChange={(e) => setRate(e.target.value)} placeholder="20.40" required />
           </div>
         </div>
         <div>
           <label className="label">Supplier (USD seller)</label>
-          <select className="input" value={supplierId} onChange={(e) => setSupplierId(e.target.value)} disabled={!!selectedDeal}>
+          <select className="input" value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
             <option value="">— Type manually —</option>
             {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
-          {!supplierId && !selectedDeal && (
+          {!supplierId && (
             <input className="input mt-2" value={source} onChange={(e) => setSource(e.target.value)} placeholder="Type supplier name, e.g. Island amenities" required />
           )}
         </div>
         <p className="text-xs text-slate-500">
-          Document line: “Purchase of USD {usdAmount ? formatAmount(parseFloat(usdAmount) || 0) : "\u2026"} from {effectiveSource || "\u2026"} at {rate || "\u2026"}”
+          Document line: “Purchase of USD {usdAmount ? formatAmount(parseFloat(usdAmount) || 0) : "…"} from {effectiveSource || "…"} at {rate || "…"}”
         </p>
       </div>
 
@@ -311,12 +302,20 @@ export default function NewRequestForm({
               </div>
             )}
             <div>
-              <label className="label">Amounts (MVR) — split into multiple lines if the bank needs separate transfers</label>
+              <label className="label">Amounts (MVR) — split into multiple lines if the bank needs separate transfers, and tag each one with a deal it pays into if applicable</label>
               <div className="space-y-2">
                 {t.amounts.map((a, ai) => (
-                  <div key={ai} className="flex items-center gap-2">
+                  <div key={ai} className="flex flex-wrap items-center gap-2">
                     <span className="w-6 text-right text-sm text-slate-400">{ai + 1})</span>
-                    <input type="number" step="0.01" min="0" className="input" value={a} onChange={(e) => setAmount(ti, ai, e.target.value)} placeholder="61680" />
+                    <input type="number" step="0.01" min="0" className="input w-36" value={a} onChange={(e) => setAmount(ti, ai, e.target.value)} placeholder="61680" />
+                    <select className="input flex-1 sm:w-72" value={t.dealIds[ai] || ""} onChange={(e) => setDealId(ti, ai, e.target.value)}>
+                      <option value="">— Standalone, not part of a deal —</option>
+                      {dealsForCompany.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.refNo} — {d.name} ({d.mvrPending > 0.5 ? `pending ${formatAmount(d.mvrPending)}` : "fully paid"}{d.status === "CLOSED" ? " · Closed" : ""})
+                        </option>
+                      ))}
+                    </select>
                     <button type="button" onClick={() => removeAmount(ti, ai)} className="btn-ghost px-2 py-1 text-xs" disabled={t.amounts.length === 1}>Remove</button>
                   </div>
                 ))}
@@ -358,7 +357,7 @@ export default function NewRequestForm({
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       <div className="flex items-center gap-3">
-        <button className="btn-primary" disabled={saving}>{saving ? "Saving\u2026" : isEdit ? "Save changes" : "Save & generate"}</button>
+        <button className="btn-primary" disabled={saving}>{saving ? "Saving…" : isEdit ? "Save changes" : "Save & generate"}</button>
         {!isEdit && <span className="text-xs text-slate-500">The reference number is assigned when you save.</span>}
       </div>
     </form>

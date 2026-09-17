@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { formatAmount, formatDate } from "@/lib/format";
-import { computeDealTotals, summarizeRequestStatuses } from "@/lib/deal";
+import { computeDealTotals, summarizeRequestStatuses, requestTouchesDeal } from "@/lib/deal";
 import * as XLSX from "xlsx";
 import { renderTablePdf, PdfCol, slugifyTitle, buildReportSheet } from "@/lib/pdfTable";
 
@@ -33,23 +33,28 @@ export async function GET(req: Request) {
     if (to) where.date.lte = new Date(`${to}T23:59:59Z`);
   }
 
-  const deals = await prisma.deal.findMany({
-    where,
-    include: {
-      company: { select: { id: true, name: true } },
-      supplier: { select: { name: true } },
-      requests: { select: { transfers: true, status: true } },
-      usdReceipts: { select: { usdAmount: true } },
-    },
-    orderBy: { date: "asc" },
-  });
+  const [deals, allRequests] = await Promise.all([
+    prisma.deal.findMany({
+      where,
+      include: {
+        company: { select: { id: true, name: true } },
+        supplier: { select: { name: true } },
+        usdReceipts: { select: { usdAmount: true } },
+      },
+      orderBy: { date: "asc" },
+    }),
+    // One amount line can pay into a different deal than the request's
+    // other lines, so totals/status are computed against every request.
+    prisma.request.findMany({ select: { dealId: true, transfers: true, status: true } }),
+  ]);
 
   const list = deals
     .filter((d: (typeof deals)[number]) =>
       q ? `${d.refNo} ${d.name} ${d.supplier.name}`.toLowerCase().includes(q) : true
     )
     .map((d: (typeof deals)[number]) => {
-      const t = computeDealTotals(d, d.requests, d.usdReceipts);
+      const t = computeDealTotals(d, allRequests, d.usdReceipts);
+      const dealRequests = allRequests.filter((r) => requestTouchesDeal(r, d.id));
       return {
         refNo: d.refNo,
         dealName: d.name,
@@ -64,7 +69,7 @@ export async function GET(req: Request) {
         usdReceived: t.usdReceived,
         usdPending: Math.max(t.usdPending, 0),
         status: d.status === "CLOSED" ? "Closed" : "Open",
-        requestsSummary: summarizeRequestStatuses(d.requests),
+        requestsSummary: summarizeRequestStatuses(dealRequests),
       };
     });
 

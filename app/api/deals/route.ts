@@ -16,20 +16,24 @@ export async function GET(req: Request) {
   const pendingOnly = url.searchParams.get("pending") === "1";
   const companyId = url.searchParams.get("companyId") || undefined;
 
-  const deals = await prisma.deal.findMany({
-    where: companyId ? { companyId } : undefined,
-    include: {
-      supplier: { select: { id: true, name: true } },
-      company: { select: { id: true, name: true, brandColor: true } },
-      requests: { select: { transfers: true } },
-      usdReceipts: { select: { usdAmount: true } },
-    },
-    orderBy: { createdAt: "desc" },
-  });
+  const [deals, allRequests] = await Promise.all([
+    prisma.deal.findMany({
+      where: companyId ? { companyId } : undefined,
+      include: {
+        supplier: { select: { id: true, name: true } },
+        company: { select: { id: true, name: true, brandColor: true } },
+        usdReceipts: { select: { usdAmount: true } },
+      },
+      orderBy: { createdAt: "desc" },
+    }),
+    // One amount line can pay into a different deal than the request's
+    // other lines, so totals are computed against every request.
+    prisma.request.findMany({ select: { dealId: true, transfers: true } }),
+  ]);
 
   const withTotals = deals.map((d: (typeof deals)[number]) => {
-    const totals = computeDealTotals(d, d.requests, d.usdReceipts);
-    const { requests, usdReceipts, ...rest } = d;
+    const totals = computeDealTotals(d, allRequests, d.usdReceipts);
+    const { usdReceipts, ...rest } = d;
     return { ...rest, totals };
   });
 

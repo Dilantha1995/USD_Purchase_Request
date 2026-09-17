@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { formatAmount, formatDate, totalMvr, Transfer } from "@/lib/format";
+import { distinctDealIds, effectiveDealId } from "@/lib/deal";
 import StatusActions from "./StatusActions";
 import DeleteRequest from "./DeleteRequest";
 
@@ -18,13 +19,21 @@ export default async function RequestDetail({ params }: { params: { id: string }
     include: {
       company: { select: { id: true, name: true, brandColor: true } },
       createdBy: { select: { name: true, email: true } },
-      deal: { select: { id: true, refNo: true, name: true } },
     },
   });
   if (!r) notFound();
 
   const transfers = r.transfers as unknown as Transfer[];
   const isTransfer = r.docType === "TRF";
+
+  // A request's amount lines can each pay into a different deal — resolve
+  // every distinct one touched (falling back to the legacy whole-request
+  // dealId for older requests) so they can all be shown, not just one.
+  const linkedDealIds = distinctDealIds(r);
+  const linkedDeals = linkedDealIds.length
+    ? await prisma.deal.findMany({ where: { id: { in: linkedDealIds } }, select: { id: true, refNo: true, name: true } })
+    : [];
+  const dealById = new Map(linkedDeals.map((d) => [d.id, d]));
 
   return (
     <div className="space-y-5">
@@ -71,12 +80,18 @@ export default async function RequestDetail({ params }: { params: { id: string }
               USD {formatAmount(r.usdAmount)} from {r.source} at {r.rate}
             </Row>
           )}
-          {r.deal && (
-            <Row label="Deal">
-              <Link href={`/deals/${r.deal.id}`} className="font-mono text-xs text-ink hover:underline">
-                {r.deal.refNo}
-              </Link>
-              <span className="text-slate-400"> — {r.deal.name}</span>
+          {linkedDeals.length > 0 && (
+            <Row label={linkedDeals.length > 1 ? "Deals" : "Deal"}>
+              <div className="space-y-0.5">
+                {linkedDeals.map((d) => (
+                  <div key={d.id}>
+                    <Link href={`/deals/${d.id}`} className="font-mono text-xs text-ink hover:underline">
+                      {d.refNo}
+                    </Link>
+                    <span className="text-slate-400"> — {d.name}</span>
+                  </div>
+                ))}
+              </div>
             </Row>
           )}
           <Row label="Transfer from">{r.sourceAccount}</Row>
@@ -99,11 +114,23 @@ export default async function RequestDetail({ params }: { params: { id: string }
                     <div className="text-slate-500">A/C No. {t.account}</div>
                   )}
                   <ul className="mt-1 space-y-0.5">
-                    {t.amounts.map((a, j) => (
-                      <li key={j} className="text-slate-700">
-                        {j + 1}) {formatAmount(a)}
-                      </li>
-                    ))}
+                    {t.amounts.map((a, j) => {
+                      const dealId = effectiveDealId(t, j, r.dealId);
+                      const deal = dealId ? dealById.get(dealId) : undefined;
+                      return (
+                        <li key={j} className="text-slate-700">
+                          {j + 1}) {formatAmount(a)}
+                          {deal && (
+                            <>
+                              {" — "}
+                              <Link href={`/deals/${deal.id}`} className="font-mono text-xs text-ink hover:underline">
+                                {deal.refNo}
+                              </Link>
+                            </>
+                          )}
+                        </li>
+                      );
+                    })}
                   </ul>
                 </div>
               ))}
