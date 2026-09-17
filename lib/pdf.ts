@@ -31,7 +31,13 @@ const COLOR_LINE = rgb(0.8, 0.8, 0.8);
 // signature block on the single letterhead page instead of running past it.
 const BASE = { font: 11, purchaseGap: 38, refToBodyGap: 40, headerGap: 24, lineGap: 20, groupGap: 8 };
 const MIN_SCALE = 0.45;
-const MIN_Y_BEFORE_SIGNATURE = 190;
+// Tuned together so the signature block deterministically lands at
+// (boxBottom + SIG_CEILING) whenever content fits within scale — see the
+// note above COMPACT_MIN_Y_BEFORE_SIGNATURE for the same trick.
+const MIN_Y_BEFORE_SIGNATURE = 140;
+const CONTENT_TO_SIG_GAP = 40;
+const SIG_CEILING = 100;
+const TITLE_OFFSET = 140; // page top -> title baseline, clears the letterhead logo above it
 
 // When a receipt copy is requested, the document is rendered twice on the
 // one page (office copy + a take-away copy for whoever collects payment) —
@@ -108,7 +114,9 @@ export async function generateRequestPdf(templateBytes: Uint8Array, data: Reques
     const rawScale = (contentStartY - opts.boxBottom - opts.minYBeforeSignature) / (baseNeeded + opts.base.refToBodyGap);
     const scale = Math.max(opts.minScale, Math.min(1, rawScale));
     const gap = (v: number) => v * scale;
-    const size = Math.max(7.5, Math.min(opts.base.font, opts.base.font * Math.sqrt(scale)));
+    // Font size stays fixed regardless of transfer count — only the spacing
+    // between lines compresses to keep a long list on the one page.
+    const size = opts.base.font;
 
     let y = opts.titleY;
     const title = isTransfer ? "Transfer" : "Dollar Purchase";
@@ -179,8 +187,11 @@ export async function generateRequestPdf(templateBytes: Uint8Array, data: Reques
       new Set(data.transfers.filter((t) => t.paymentMethod === "CASH" && t.collectedBy).map((t) => t.collectedBy as string))
     );
     if (cashCollectors.length > 0) {
-      page.drawText("Collected By", { x: MARGIN, y: sigLabelY - 40, size: opts.base.font, font: bold, color: COLOR_INK });
-      page.drawText(cashCollectors.join(", "), { x: MARGIN, y: sigLabelY - 60, size: opts.base.font, font, color: COLOR_INK });
+      // A clear gap below the Requested/Approved row (not just another
+      // 20pt line) so the collector line reads as its own group, not a
+      // third line crammed into the same block.
+      page.drawText("Collected By", { x: MARGIN, y: sigLabelY - 50, size: opts.base.font, font: bold, color: COLOR_INK });
+      page.drawText(cashCollectors.join(", "), { x: MARGIN, y: sigLabelY - 70, size: opts.base.font, font, color: COLOR_INK });
     }
 
     if (data.status === "PAID") {
@@ -239,13 +250,13 @@ export async function generateRequestPdf(templateBytes: Uint8Array, data: Reques
     });
   } else {
     await drawCopy({
-      titleY: height - 185,
+      titleY: height - TITLE_OFFSET,
       boxBottom: 0,
       base: BASE,
       minScale: MIN_SCALE,
       minYBeforeSignature: MIN_Y_BEFORE_SIGNATURE,
-      contentToSigGap: 40,
-      sigCeiling: 150,
+      contentToSigGap: CONTENT_TO_SIG_GAP,
+      sigCeiling: SIG_CEILING,
     });
   }
 
