@@ -134,7 +134,13 @@ export async function generateRequestPdf(templateBytes: Uint8Array, data: Reques
       y -= gap(opts.base.purchaseGap);
     }
 
-    for (const t of data.transfers) {
+    data.transfers.forEach((t, ti) => {
+      // A sequential letter (A, B, C, …) to the left of each transfer line,
+      // so a specific transfer can be pointed to/referenced unambiguously
+      // when there are several on one document.
+      const label = String.fromCharCode(65 + ti);
+      page.drawText(label, { x: MARGIN - 22, y, size: size + 1, font: bold, color: COLOR_INK });
+
       if (t.paymentMethod === "CASH") {
         drawSegs(
           [
@@ -165,7 +171,7 @@ export async function generateRequestPdf(templateBytes: Uint8Array, data: Reques
         y -= gap(opts.base.lineGap);
       });
       y -= gap(opts.base.groupGap);
-    }
+    });
 
     // Signature block pinned near the bottom of this copy's box (drops just
     // below content only if the body is very long) — same rule as before,
