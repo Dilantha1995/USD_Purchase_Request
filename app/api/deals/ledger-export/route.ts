@@ -245,9 +245,14 @@ export async function GET(req: Request) {
   for (const { deal, entries, mvrPending, usdPending } of deriveDealRows) {
     let subMvr = 0, subUsd = 0;
     const remarks = deal.notes || "";
+    // Matches the Excel export's repeated, boxed header row before each
+    // deal's block, instead of relying on the single plain header at the
+    // top of the page.
+    pdfRows.push({ cells: {}, columnHeaderRow: true });
     pdfRows.push({ cells: {}, heading: `${deal.refNo} — ${deal.name} — ${deal.supplier.name}` });
     for (const e of entries) {
       pdfRows.push({
+        boxed: true,
         cells: {
           date: formatDate(e.date),
           type: e.type === "PAYMENT" ? "Payment" : "Receipt",
@@ -293,6 +298,7 @@ export async function GET(req: Request) {
     subtitle,
     cols,
     pageWidth: PDF_WIDTH,
+    noInitialHeader: true,
     rows: pdfRows,
   });
 

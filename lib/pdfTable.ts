@@ -43,6 +43,10 @@ export type PdfRow = {
   heading?: string;
   /** Background highlight for the row (e.g. green/yellow grand-total rows), as an [r,g,b] triple in 0-1. */
   fill?: [number, number, number];
+  /** Draws a bordered box around every cell in this row, matching a spreadsheet's gridded cells. */
+  boxed?: boolean;
+  /** Renders this row as a repeated bold, boxed column-header row (using the table's own column headers) instead of drawing `cells`. */
+  columnHeaderRow?: boolean;
 };
 
 /** Generic paginated table renderer shared by the report export routes. */
@@ -54,6 +58,8 @@ export async function renderTablePdf(opts: {
   pageWidth?: number;
   pageHeight?: number;
   margin?: number;
+  /** Skip the automatic header drawn once at the top of the report — use when the rows themselves inject their own (e.g. boxed, per-section) header rows instead. */
+  noInitialHeader?: boolean;
 }): Promise<Uint8Array> {
   const PW = opts.pageWidth ?? 842;
   const PH = opts.pageHeight ?? 595;
@@ -98,7 +104,7 @@ export async function renderTablePdf(opts: {
     page.drawLine({ start: { x: M, y }, end: { x: PW - M, y }, thickness: 0.7, color: grey });
     y -= 12;
   };
-  drawHeader();
+  if (!opts.noInitialHeader) drawHeader();
 
   for (const row of opts.rows) {
     if (y < 40) {
@@ -115,16 +121,34 @@ export async function renderTablePdf(opts: {
     if (row.topBorder) {
       page.drawLine({ start: { x: M, y: y + 9 }, end: { x: PW - M, y: y + 9 }, thickness: 0.5, color: grey });
     }
+    if (row.columnHeaderRow) {
+      // A repeated column-header row (e.g. before each deal's block in the
+      // general ledger), boxed and centered like a spreadsheet's header row
+      // instead of the plain single header drawn once at the top of the page.
+      opts.cols.forEach((c, i) => {
+        page.drawRectangle({ x: xs[i], y: y - 4, width: c.w, height: 13, borderColor: ink, borderWidth: 0.5 });
+        const txt = clip(c.h, c.w, true);
+        const tx = xs[i] + (c.w - bold.widthOfTextAtSize(txt, 8)) / 2;
+        page.drawText(txt, { x: tx, y, size: 8, font: bold, color: ink });
+      });
+      y -= 14;
+      continue;
+    }
     if (row.heading != null) {
       // A section heading (e.g. a deal's ref/name/supplier) starts flush at
-      // the left margin and spans the full table width, instead of being
-      // pinned to whichever column key it happened to be drawn under.
-      page.drawText(clip(row.heading, PW - M * 2, true), { x: M, y, size: 8, font: bold, color: ink });
+      // the left margin and spans every column but the last, instead of
+      // being pinned to whichever column key it happened to be drawn under
+      // — boxed to match the merged, bordered heading cell in the
+      // spreadsheet version of this report.
+      const headingWidth = (xs[xs.length - 1] ?? PW - M) - M;
+      page.drawRectangle({ x: M, y: y - 4, width: headingWidth, height: 13, borderColor: ink, borderWidth: 0.5 });
+      page.drawText(clip(row.heading, headingWidth, true), { x: M + 2, y, size: 8, font: bold, color: ink });
       y -= 14;
       continue;
     }
     const f = row.bold ? bold : font;
     opts.cols.forEach((c, i) => {
+      if (row.boxed) page.drawRectangle({ x: xs[i], y: y - 4, width: c.w, height: 13, borderColor: grey, borderWidth: 0.5 });
       const txt = clip(row.cells[c.key] ?? "", c.w, row.bold);
       const x = c.align === "r" ? xs[i] + c.w - 6 - f.widthOfTextAtSize(txt, 8) : xs[i] + 2;
       page.drawText(txt, { x, y, size: 8, font: f, color: ink });
