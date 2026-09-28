@@ -34,12 +34,11 @@ const COLOR_LINE = rgb(0.8, 0.8, 0.8);
 // signature block on the single letterhead page instead of running past it.
 const BASE = { font: 11, purchaseGap: 38, refToBodyGap: 40, headerGap: 24, lineGap: 20, groupGap: 8 };
 const MIN_SCALE = 0.45;
-// Tuned together so the signature block deterministically lands at
-// (boxBottom + SIG_CEILING) whenever content fits within scale — see the
-// note above COMPACT_MIN_Y_BEFORE_SIGNATURE for the same trick.
+// Floor for the auto-fit scale computation, below — keeps a long transfer
+// list from running past the point where the signature block (which always
+// follows right after the content) would no longer fit above the bottom edge.
 const MIN_Y_BEFORE_SIGNATURE = 140;
 const CONTENT_TO_SIG_GAP = 40;
-const SIG_CEILING = 100;
 const TITLE_OFFSET = 140; // page top -> title baseline, clears the letterhead logo above it
 
 // When a receipt copy is requested, the document is rendered twice on the
@@ -48,14 +47,10 @@ const TITLE_OFFSET = 140; // page top -> title baseline, clears the letterhead l
 // line still reads clearly at roughly half a letterhead page.
 const COMPACT_BASE = { font: 10, purchaseGap: 22, refToBodyGap: 24, headerGap: 16, lineGap: 14, groupGap: 5 };
 const COMPACT_MIN_SCALE = 0.55;
-// These three are tuned together so the signature block deterministically
-// lands at (boxBottom + COMPACT_SIG_CEILING) whenever content fits within
-// scale — same trick the normal layout relies on (190 - 40 = 150) — instead
-// of drifting close enough to the box's bottom edge to collide with the
-// second copy's logo below it.
+// Same auto-fit floor as MIN_Y_BEFORE_SIGNATURE, sized for this half-page
+// copy so a long list doesn't collide with the second copy's logo below it.
 const COMPACT_MIN_Y_BEFORE_SIGNATURE = 180;
 const COMPACT_CONTENT_TO_SIG_GAP = 90;
-const COMPACT_SIG_CEILING = 90;
 const COMPACT_HEADER_OFFSET = 120; // box top -> title baseline, clears the (real or stamped) logo above it
 
 function neededBodyHeight(isTransfer: boolean, transfers: Transfer[], base: typeof BASE) {
@@ -103,7 +98,6 @@ export async function generateRequestPdf(templateBytes: Uint8Array, data: Reques
     minScale: number;
     minYBeforeSignature: number;
     contentToSigGap: number;
-    sigCeiling: number;
     logoStamp?: { embedded: PDFEmbeddedPage; x: number; y: number; width: number; height: number };
   }) {
     if (opts.logoStamp) {
@@ -187,10 +181,11 @@ export async function generateRequestPdf(templateBytes: Uint8Array, data: Reques
       y -= gap(opts.base.groupGap);
     });
 
-    // Signature block pinned near the bottom of this copy's box (drops just
-    // below content only if the body is very long) — same rule as before,
-    // just relative to this copy's own box instead of the whole page.
-    const sigLabelY = Math.min(opts.boxBottom + opts.sigCeiling, y - opts.contentToSigGap);
+    // Signature block always follows shortly after the transaction details
+    // end, rather than sitting at a fixed spot near the bottom of the page —
+    // a short document's signature sits right under its content, and only a
+    // long one pushes it down near the bottom edge.
+    const sigLabelY = y - opts.contentToSigGap;
     const rightX = 330;
 
     await placeSig(data.requestedSignature, MARGIN, sigLabelY);
@@ -253,7 +248,6 @@ export async function generateRequestPdf(templateBytes: Uint8Array, data: Reques
       minScale: COMPACT_MIN_SCALE,
       minYBeforeSignature: COMPACT_MIN_Y_BEFORE_SIGNATURE,
       contentToSigGap: COMPACT_CONTENT_TO_SIG_GAP,
-      sigCeiling: COMPACT_SIG_CEILING,
     });
 
     page.drawLine({ start: { x: MARGIN, y: half }, end: { x: width - MARGIN, y: half }, thickness: 0.75, color: COLOR_LINE });
@@ -265,7 +259,6 @@ export async function generateRequestPdf(templateBytes: Uint8Array, data: Reques
       minScale: COMPACT_MIN_SCALE,
       minYBeforeSignature: COMPACT_MIN_Y_BEFORE_SIGNATURE,
       contentToSigGap: COMPACT_CONTENT_TO_SIG_GAP,
-      sigCeiling: COMPACT_SIG_CEILING,
       logoStamp: { embedded: embeddedLogo, x: 0, y: half - logoStripHeight, width, height: logoStripHeight },
     });
   } else {
@@ -276,7 +269,6 @@ export async function generateRequestPdf(templateBytes: Uint8Array, data: Reques
       minScale: MIN_SCALE,
       minYBeforeSignature: MIN_Y_BEFORE_SIGNATURE,
       contentToSigGap: CONTENT_TO_SIG_GAP,
-      sigCeiling: SIG_CEILING,
     });
   }
 
