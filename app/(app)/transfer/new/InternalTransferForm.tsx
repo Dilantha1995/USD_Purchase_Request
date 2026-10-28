@@ -9,27 +9,45 @@ type BankAccount = { id: string; label: string; companyId?: string | null };
 type AmountRow = { value: string; note: string };
 type TransferDraft = { sourceAccount: string; recipient: string; account: string; amounts: AmountRow[] };
 
+type Existing = {
+  id: string;
+  companyId: string;
+  companyName: string;
+  refNo: string;
+  date: string;
+  requestedBy: string;
+  approvedBy: string;
+  transfers: TransferDraft[];
+};
+
 function todayISO() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 export default function InternalTransferForm({
-  companies, bankAccounts, defaultRequestedBy,
-}: { companies: Company[]; bankAccounts: BankAccount[]; defaultRequestedBy: string }) {
+  companies, bankAccounts, defaultRequestedBy, existing,
+}: { companies: Company[]; bankAccounts: BankAccount[]; defaultRequestedBy: string; existing?: Existing }) {
   const router = useRouter();
-  const [companyId, setCompanyId] = useState(companies[0]?.id ?? "");
+  const isEdit = !!existing;
+  const [companyId, setCompanyId] = useState(existing?.companyId ?? companies[0]?.id ?? "");
   const company = companies.find((c) => c.id === companyId);
-  const [date, setDate] = useState(todayISO());
-  const [requestedBy, setRequestedBy] = useState(defaultRequestedBy);
-  const [approvedBy, setApprovedBy] = useState("");
-  const [transfers, setTransfers] = useState<TransferDraft[]>([{ sourceAccount: "", recipient: "", account: "", amounts: [{ value: "", note: "" }] }]);
+  const [refNo, setRefNo] = useState(existing?.refNo ?? "");
+  const [date, setDate] = useState(existing?.date ?? todayISO());
+  const [requestedBy, setRequestedBy] = useState(existing?.requestedBy ?? defaultRequestedBy);
+  const [approvedBy, setApprovedBy] = useState(existing?.approvedBy ?? "");
+  const [transfers, setTransfers] = useState<TransferDraft[]>(
+    existing?.transfers?.length
+      ? existing.transfers
+      : [{ sourceAccount: "", recipient: "", account: "", amounts: [{ value: "", note: "" }] }]
+  );
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
   const companyBanks = bankAccounts.filter((b) => !b.companyId || b.companyId === companyId);
 
   const refPreview = useMemo(() => {
+    if (isEdit) return refNo;
     if (!company) return "";
     const d = new Date(`${date}T00:00:00Z`);
     if (isNaN(d.getTime())) return "";
@@ -37,7 +55,7 @@ export default function InternalTransferForm({
     const sameMonth = company.serialPeriod === period || company.serialPeriod == null;
     const serial = sameMonth ? company.nextSerial : 1;
     return buildRefNo(company.refPrefix, d, serial, "TRF");
-  }, [company, date]);
+  }, [company, date, isEdit, refNo]);
 
   const total = useMemo(() => transfers.reduce((s, t) => s + t.amounts.reduce((a, r) => a + (parseFloat(r.value) || 0), 0), 0), [transfers]);
 
@@ -52,43 +70,57 @@ export default function InternalTransferForm({
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(""); setSaving(true);
-    const payload = {
-      docType: "TRF",
-      companyId, date, requestedBy, approvedBy,
-      source: "Internal Transfer",
-      transfers: transfers.map((t) => ({
-        sourceAccount: t.sourceAccount, recipient: t.recipient, account: t.account,
-        amounts: t.amounts.map((r) => parseFloat(r.value)).filter((n) => !isNaN(n) && n > 0),
-        notes: t.amounts.map((r) => r.note),
-      })),
-    };
-    const res = await fetch("/api/requests", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    const transfersPayload = transfers.map((t) => ({
+      sourceAccount: t.sourceAccount, recipient: t.recipient, account: t.account,
+      amounts: t.amounts.map((r) => parseFloat(r.value)).filter((n) => !isNaN(n) && n > 0),
+      notes: t.amounts.map((r) => r.note),
+    }));
+    let res: Response;
+    if (isEdit) {
+      const payload = { _edit: true, refNo, date, requestedBy, approvedBy, source: "Internal Transfer", transfers: transfersPayload };
+      res = await fetch(`/api/requests/${existing!.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    } else {
+      const payload = { docType: "TRF", companyId, date, requestedBy, approvedBy, source: "Internal Transfer", transfers: transfersPayload };
+      res = await fetch("/api/requests", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    }
     setSaving(false);
-    if (res.ok) { const { id } = await res.json(); router.push(`/requests/${id}`); router.refresh(); }
-    else { const d = await res.json().catch(() => ({})); setError(d.error || "Could not save."); }
+    if (res.ok) {
+      const id = isEdit ? existing!.id : (await res.json()).id;
+      router.push(`/requests/${id}`); router.refresh();
+    } else { const d = await res.json().catch(() => ({})); setError(d.error || "Could not save."); }
   }
 
   return (
     <form onSubmit={submit} className="mx-auto max-w-5xl space-y-6">
       <datalist id="trfBanks">{companyBanks.map((b) => <option key={b.id} value={b.label} />)}</datalist>
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">New internal transfer</h1>
+        <h1 className="text-xl font-semibold">{isEdit ? "Edit internal transfer" : "New internal transfer"}</h1>
         {refPreview && <span className="rounded-md bg-slate-100 px-3 py-1.5 font-mono text-xs text-slate-600">{refPreview}</span>}
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {companies.map((c) => {
-          const active = c.id === companyId;
-          return (
-            <button type="button" key={c.id} onClick={() => setCompanyId(c.id)}
-              className={`card flex items-center gap-3 p-4 text-left transition ${active ? "ring-2" : "hover:bg-slate-50"}`}
-              style={active ? { boxShadow: `0 0 0 2px ${c.brandColor}` } : undefined}>
-              <span className="h-3 w-3 rounded-full" style={{ backgroundColor: c.brandColor }} />
-              <span className="block text-sm font-medium">{c.name}</span>
-            </button>
-          );
-        })}
-      </div>
+      {isEdit ? (
+        <div className="card space-y-3 p-4 text-sm">
+          <div>Company: <strong>{existing!.companyName}</strong> <span className="text-slate-400">(cannot change on edit)</span></div>
+          <div>
+            <label className="label">Reference number</label>
+            <input className="input font-mono sm:w-64" value={refNo} onChange={(e) => setRefNo(e.target.value)} required />
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {companies.map((c) => {
+            const active = c.id === companyId;
+            return (
+              <button type="button" key={c.id} onClick={() => setCompanyId(c.id)}
+                className={`card flex items-center gap-3 p-4 text-left transition ${active ? "ring-2" : "hover:bg-slate-50"}`}
+                style={active ? { boxShadow: `0 0 0 2px ${c.brandColor}` } : undefined}>
+                <span className="h-3 w-3 rounded-full" style={{ backgroundColor: c.brandColor }} />
+                <span className="block text-sm font-medium">{c.name}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       <div className="card p-5"><label className="label">Date</label><input type="date" className="input sm:w-56" value={date} onChange={(e) => setDate(e.target.value)} required /></div>
 
@@ -130,7 +162,7 @@ export default function InternalTransferForm({
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
-      <button className="btn-primary" disabled={saving}>{saving ? "Saving\u2026" : "Save & generate"}</button>
+      <button className="btn-primary" disabled={saving}>{saving ? "Saving\u2026" : isEdit ? "Save changes" : "Save & generate"}</button>
     </form>
   );
 }

@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { Transfer } from "@/lib/format";
 import { getAssignableDeals } from "@/lib/deal";
 import NewRequestForm from "../../../new/NewRequestForm";
+import InternalTransferForm from "../../../transfer/new/InternalTransferForm";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +24,33 @@ export default async function EditRequestPage({ params }: { params: { id: string
     prisma.bankAccount.findMany({ where: { active: true }, select: { id: true, label: true, companyId: true }, orderBy: { label: "asc" } }),
   ]);
   if (!r) notFound();
+
+  if (r.docType === "TRF") {
+    const trfTransfers = (r.transfers as unknown as Transfer[]).map((t) => ({
+      sourceAccount: t.sourceAccount || r.sourceAccount || "",
+      recipient: t.recipient,
+      account: t.account,
+      amounts: t.amounts.map((a, i) => ({ value: String(a), note: t.notes?.[i] || "" })),
+    }));
+    return (
+      <InternalTransferForm
+        companies={companies}
+        bankAccounts={bankAccounts}
+        defaultRequestedBy={me?.name || ""}
+        existing={{
+          id: r.id,
+          companyId: r.companyId,
+          companyName: r.company.name,
+          refNo: r.refNo,
+          date: isoDate(r.date),
+          requestedBy: r.requestedBy,
+          approvedBy: r.approvedBy,
+          transfers: trfTransfers,
+        }}
+      />
+    );
+  }
+
   // Every deal is offered here (not just pending ones) — attaching an
   // already-created amount line to a deal after the fact is a bookkeeping
   // correction, not a new payment.

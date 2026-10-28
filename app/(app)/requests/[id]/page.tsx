@@ -48,8 +48,11 @@ export default async function RequestDetail({ params }: { params: { id: string }
           <a href={`/api/requests/${r.id}/pdf?download=1`} className="btn-ghost">
             Download PDF
           </a>
+          <a href={`/api/requests/${r.id}/docx`} className="btn-ghost">
+            Download Word
+          </a>
           <StatusActions id={r.id} initialStatus={r.status} />
-          {canEdit && !isTransfer && (
+          {canEdit && (
             <Link href={`/requests/${r.id}/edit`} className="btn-ghost">Edit</Link>
           )}
           {canDelete && <DeleteRequest id={r.id} refNo={r.refNo} />}

@@ -32,6 +32,7 @@ function cleanTransfers(t: any) {
         supplierId: g?.supplierId || null,
         amounts,
         dealIds: dealIds.some((d) => d) ? dealIds : undefined,
+        notes: Array.isArray(g?.notes) ? g.notes.map((n: any) => String(n ?? "").trim()) : undefined,
       };
     })
     .filter((g) => g.recipient && g.amounts.length > 0 && (g.paymentMethod === "CASH" ? g.collectedBy : g.account));
@@ -52,16 +53,26 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   if (b._edit) {
     if (!(await can("canEditRequests")))
       return NextResponse.json({ error: "You don't have access to edit requests" }, { status: 403 });
-    const existing = await prisma.request.findUnique({ where: { id: params.id }, select: { companyId: true } });
+    const existing = await prisma.request.findUnique({ where: { id: params.id }, select: { companyId: true, docType: true } });
     if (!existing) return NextResponse.json({ error: "Request not found" }, { status: 404 });
+    const isTransfer = existing.docType === "TRF";
     const transfers = cleanTransfers(b.transfers);
     if (transfers.length === 0)
       return NextResponse.json({ error: "Add at least one transfer with an amount" }, { status: 400 });
-    const usd = Number(b.usdAmount);
-    const rt = Number(b.rate);
-    const settings = await prisma.settings.findUnique({ where: { id: "default" } });
-    const bankRate = settings?.defaultBankRate ?? 15.42;
     const srcAcct = (String(b.sourceAccount || "").trim() || transfers[0]?.sourceAccount || "").trim();
+
+    // A transfer request has no USD-purchase leg — keep those fields at the
+    // same defaults POST assigns on creation instead of parsing the (absent)
+    // usdAmount/rate fields the transfer edit form never sends, which would
+    // otherwise write NaN into both columns and a bogus exchangeLoss.
+    let usd = 0, rt = 0, bankRate: number | null = null, exchangeLoss: number | null = null;
+    if (!isTransfer) {
+      usd = Number(b.usdAmount);
+      rt = Number(b.rate);
+      const settings = await prisma.settings.findUnique({ where: { id: "default" } });
+      bankRate = settings?.defaultBankRate ?? 15.42;
+      exchangeLoss = (rt - bankRate) * usd;
+    }
 
     const dealIds = referencedDealIds(transfers);
     if (dealIds.length > 0) {
@@ -88,8 +99,8 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
         usdAmount: usd,
         rate: rt,
         bankRate,
-        exchangeLoss: (rt - bankRate) * usd,
-        source: String(b.source || "").trim(),
+        exchangeLoss,
+        source: String(b.source || "").trim() || (isTransfer ? "Internal Transfer" : ""),
         sourceAccount: srcAcct,
         // The legacy whole-request dealId is superseded by per-amount-line
         // deal tags (already carried forward into transfers[].dealIds by
